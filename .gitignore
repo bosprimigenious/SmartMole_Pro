@@ -1,0 +1,27 @@
+# Build artifacts
+*.o
+*.a
+*.so
+*.dep
+Make.dep
+
+# IDE / OS
+.vscode/
+.idea/
+.claude/
+Thumbs.db
+Desktop.ini
+*.swp
+*~
+
+# Large binaries (kept locally under firmware/ and archives/)
+firmware/*.img
+archives/*.tar
+archives/*.tar.gz
+archives/*.zip
+
+# Typst compile scratch
+docs/footer_test*.pdf
+
+# Fonts are tracked separately; ignore accidental downloads
+docs/fonts/*.zip

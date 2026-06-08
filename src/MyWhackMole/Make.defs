@@ -1,0 +1,3 @@
+ifneq ($(CONFIG_EXAMPLES_MYWHACKMOLE),)
+CONFIGURED_APPS += $(APPDIR)/examples/MyWhackMole
+endif

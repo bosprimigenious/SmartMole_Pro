@@ -1,0 +1,29 @@
+menuconfig EXAMPLES_MYWHACKMOLE
+	tristate "WHACKMOLE Demo"
+	default n
+	depends on GRAPHICS_LVGL
+	---help---
+		Enable build the Light and Versatile Graphics Library Demo programs
+
+if EXAMPLES_MYWHACKMOLE
+
+config EXAMPLES_MYWHACKMOLE_PRIORITY
+	int "mywhackmole task priority"
+	default 100
+
+config EXAMPLES_MYWHACKMOLE_STACKSIZE
+	int "mywhackmole stack size"
+	default 327680
+
+config EXAMPLES_MYWHACKMOLE_INPUT_DEVPATH
+	string "Touchscreen device path"
+	default "/dev/input0"
+	depends on INPUT_TOUCHSCREEN
+	---help---
+		The path to the touchscreen device. Default: "/dev/input0"
+
+config EXAMPLES_MYWHACKMOLE_DATA_ROOT
+	string "Whackmole Data Root"
+	default "/data"
+
+endif

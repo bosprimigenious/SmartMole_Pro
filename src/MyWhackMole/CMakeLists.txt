@@ -1,0 +1,20 @@
+if(CONFIG_EXAMPLES_MYWHACKMOLE)
+  nuttx_add_application(
+    NAME
+    mywhackmole
+    PRIORITY
+    ${CONFIG_EXAMPLES_MYWHACKMOLE_PRIORITY}
+    STACKSIZE
+    ${CONFIG_EXAMPLES_MYWHACKMOLE_STACKSIZE}
+    MODULE
+    ${CONFIG_EXAMPLES_MYWHACKMOLE}
+    DEPENDS
+    lvgl
+    SRCS
+    MyWhackMole.c
+    MyWhackMole_main.c
+    lv_100ask_xz_ai_main.c
+    storage.c
+    wifi_ui.c
+  )
+endif()
