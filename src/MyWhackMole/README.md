@@ -32,20 +32,28 @@ unzip res.zip -d /data/
 
 | 路径 | 说明 |
 |------|------|
-| `MyWhackMole.c` | 游戏逻辑、UI 按钮、音效/LED 线程 |
-| `wifi_ui.c` | WiFi 连接弹窗（SSID/PWD + SCAN/CONNECT） |
+| `MyWhackMole.c` | 游戏逻辑、UI 按钮、LED 线程 |
+| `media_wifi/media_wifi.c` | 音效 + WiFi 配网 + UDP 联机 + 对战会话（合并模块） |
+| `media_wifi/media_wifi_ui.c` | WiFi 连接 LVGL 弹窗 |
 | `storage.c` | 本地统计数据读写 |
-| `versus/` | 双板 UDP 联机传输层与协议 |
+| `versus/versus_protocol.c` | 双板对战协议（编解码） |
 | `_snapshots/` | 开发过程备份，**不参与** Makefile 编译 |
 
 ## 联机 IP 配置
 
-`MyWhackMole.c` 中 `versus_init_if_enabled()`：
+`media_wifi/media_wifi.c` 中默认对端 IP：
 
 ```c
-config.peer_ip = "192.168.137.91";
-config.local_port = 43046;
-config.peer_port = 43045;
+#define MEDIA_WIFI_PEER_IP "192.168.137.91"
 ```
 
-设备 A/B 角色由 `VERSUS_DEVICE_A` / `VERSUS_DEVICE_B` 宏区分，详见 `versus/versus_protocol.h`。
+本地端口 `43046`，对端端口 `43045`。设备 A/B 角色见 `versus/versus_protocol.h`。
+
+## 统一 API
+
+游戏主程序只需 `#include "media_wifi/media_wifi.h"`：
+
+- `media_wifi_init()` — 初始化音效线程、WiFi 状态、对战 UDP
+- `media_wifi_sound_play()` — 播放 hit/start 音效
+- `media_wifi_connect()` / `media_wifi_ui_show()` — WiFi 配网
+- `media_wifi_versus_send_*()` — 对战消息发送

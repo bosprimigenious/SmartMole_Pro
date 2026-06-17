@@ -1,7 +1,6 @@
-#include "wifi_ui.h"
+#include "media_wifi.h"
 
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <lvgl/lvgl.h>
 
@@ -20,45 +19,36 @@ static void wifi_connect_cb(lv_event_t* e)
 {
     const char* ssid = lv_textarea_get_text(ssid_ta);
     const char* pwd = lv_textarea_get_text(pwd_ta);
-    char cmd[256];
 
-    if (!ssid || strlen(ssid) == 0) {
-        lv_label_set_text(status_label, "SSID is empty");
-        return;
-    }
+    (void)e;
 
     lv_label_set_text(status_label, "Connecting...");
-    printf("[WIFI_UI] connect ssid=%s\n", ssid);
-
-    system("ifup wlan0");
-    system("wapi mode wlan0 2");
-
-    if (pwd && strlen(pwd) > 0) {
-        snprintf(cmd, sizeof(cmd), "wapi psk wlan0 \"%s\" 3", pwd);
-        system(cmd);
-    }
-
-    snprintf(cmd, sizeof(cmd), "wapi essid wlan0 \"%s\" 1", ssid);
-    system(cmd);
-
-    system("renew wlan0");
-    system("ifconfig");
-
-    lv_label_set_text(status_label, "Done. Check IP on serial.");
-    printf("[WIFI_UI] connect command finished\n");
+    media_wifi_connect(ssid, pwd);
+    lv_label_set_text(status_label, media_wifi_get_last_status());
 }
 
 static void wifi_scan_cb(lv_event_t* e)
 {
-    lv_label_set_text(status_label, "Scanning...");
-    system("wapi scan wlan0");
-    system("wapi scan_results wlan0 > /data/wifi_scan.txt");
-    lv_label_set_text(status_label, "Scan saved: /data/wifi_scan.txt");
-    printf("[WIFI_UI] scan result saved to /data/wifi_scan.txt\n");
+    char names[16][32];
+    int count;
+    int i;
+
+    (void)e;
+
+    count = media_wifi_scan_ap_names(names, 16);
+    lv_label_set_text(status_label, media_wifi_get_last_status());
+    if (count > 0 && ssid_ta != NULL) {
+        lv_textarea_set_text(ssid_ta, names[0]);
+        for (i = 1; i < count && i < 4; i++) {
+            printf("[MEDIA_WIFI_UI] ap[%d]=%s\n", i, names[i]);
+        }
+    }
 }
 
-void wifi_ui_show(lv_obj_t* parent)
+void media_wifi_ui_show(lv_obj_t* parent)
 {
+    (void)parent;
+
     lv_obj_t* box = lv_msgbox_create(lv_screen_active());
     lv_msgbox_add_title(box, "WiFi Connect");
     lv_obj_set_size(box, 360, 300);

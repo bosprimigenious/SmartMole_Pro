@@ -48,6 +48,7 @@
 #include <pthread.h>
 
 #include "lv_100ask_xz_ai_main.h"
+#include "media_wifi/media_wifi.h"
 #include "ui_system.h"
 
 static pthread_mutex_t lvgl_mutex;
@@ -324,53 +325,7 @@ void OnClicked(void)
  */
 static int get_wifi_ssids(char ap_names[][32], int max_count)
 {
-    FILE *fp;
-    char line[256];
-    int count = 0;
-    
-    // 打开/tmp/wifi_scan_result.txt文件
-    fp = fopen("/tmp/wifi_scan_result.txt", "r");
-    if (fp == NULL) {
-        // 文件不存在或无法打开，返回0
-        return 0;
-    }
-    
-    // 跳过第一行标题
-    if (fgets(line, sizeof(line), fp) == NULL) {
-        fclose(fp);
-        return 0;
-    }
-    
-    // 逐行读取文件内容
-    while (fgets(line, sizeof(line), fp) != NULL && count < max_count) {
-        char *token;
-        int field_count = 0;
-        char *saveptr = NULL;
-        
-        // 去除行尾的换行符
-        char *newline = strchr(line, '\n');
-        if (newline) {
-            *newline = '\0';
-        }
-        
-        // 使用空格分割字段
-        token = strtok_r(line, " \t", &saveptr);
-        while (token != NULL && field_count < 5) {
-            // 第5个字段是SSID（索引为4）
-            if (field_count == 4) {
-                // 复制SSID到ap_names数组中
-                strncpy(ap_names[count], token, 31);
-                ap_names[count][31] = '\0'; // 确保字符串结束
-                count++;
-                break;
-            }
-            token = strtok_r(NULL, " \t", &saveptr);
-            field_count++;
-        }
-    }
-    
-    fclose(fp);
-    return count;
+    return media_wifi_scan_ap_names(ap_names, max_count);
 }
 
 static lv_obj_t * lv_100ask_wifi_page_init(lv_obj_t *parent)
@@ -411,14 +366,11 @@ static void btn_set_wifi_event_cb(lv_event_t * e)
 
             // 执行命令获取WiFi列表
             LV_LOG_USER("to scan wifi ap!");
-            SetStateString("扫描热点...");  
-            lv_refr_now(NULL); // 立即刷新显示 
-            system("sh /data/get_wifi.sh > /tmp/wifi_scan_result.txt");
-            SetStateString("请选择热点...");   
-              
-            // wifi 列表
+            SetStateString("扫描热点...");
+            lv_refr_now(NULL);
             char ap_names[100][32];
             int ap_count = get_wifi_ssids(ap_names, 100);
+            SetStateString("请选择热点...");
             
             for(int index = 0; index < ap_count; index++)
             {
@@ -505,12 +457,10 @@ static void ta_event_cb(lv_event_t * e)
         char *password = lv_textarea_get_text(ta);
         LV_LOG_USER("Ready, WIFI SSID: %s, password: %s", g_wifi_ssid, password);
 
-        // 保存WiFi配置到文件
-        save_wifi_config(g_wifi_ssid, password);
-
-        // 可阻塞超时等待，如果连接成功，关闭wifi配置页面，失败则跳过继续输入密码
-        SetStateString("连接热点中..."); 
-        lv_obj_send_event(btn_set_wifi, LV_EVENT_CLICKED, NULL);
+        media_wifi_save_config(g_wifi_ssid, password);
+        SetStateString("连接热点中...");
+        media_wifi_connect(g_wifi_ssid, password);
+        SetStateString((char*)media_wifi_get_last_status());
     }
 
     // 点击最左下角的按键，关闭wifi配置页面
@@ -541,24 +491,7 @@ static const char* font_awesome_get_utf8(const char* name) {
  */
 static int save_wifi_config(const char *ssid, const char *password)
 {
-    FILE *fp;
- 
-    // 打开配置文件
-    fp = fopen("/data/wifi.cfg", "w");
-    if (fp == NULL) {
-        LV_LOG_ERROR("Failed to open /data/wifi.cfg for writing");
-        return -1;
-    }
-    
-    // 写入WiFi配置
-    fprintf(fp, "SSID=\"%s\"\n", ssid ? ssid : "");
-    fprintf(fp, "PASSWORD=\"%s\"\n", password ? password : "");
-    
-    // 关闭文件
-    fclose(fp);
-    
-    LV_LOG_USER("WiFi config saved: SSID=%s", ssid ? ssid : "");
-    return 0;
+    return media_wifi_save_config(ssid, password);
 }
 
 static void lv_100ask_xz_ai_main_deinit(void)

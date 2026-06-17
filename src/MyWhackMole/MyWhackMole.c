@@ -1,10 +1,8 @@
 #include "MyWhackMole.h"
-#include "wifi_ui.h"
+#include "media_wifi/media_wifi.h"
 #include "storage.h"
 #include "src/display/lv_display.h"
 #include "src/font/lv_font.h"
-#include "versus/versus_protocol.h"
-#include "versus/versus_wifi_transport.h"
 #include <lvgl/lvgl.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -16,7 +14,6 @@
 #include <nuttx/ioexpander/gpio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 
 #define GAME_TIME 30
 
@@ -64,6 +61,7 @@ static level_config_t current_level_config;
 static lv_obj_t* level_label = NULL;
 static lv_obj_t* mode_label = NULL;
 static lv_obj_t* combo_label = NULL;
+static lv_obj_t* wifi_status_label = NULL;
 
 #define MOLE_NORMAL 0
 #define MOLE_GOLD   1
@@ -75,22 +73,14 @@ static int combo_count = 0;
 static int score = 0;
 static int score_a = 0;
 static int score_b = 0;
-static versus_ctx_t versus;
-static versus_wifi_transport_t wifi;
-static int versus_enabled = 1;
 static int game_time = GAME_TIME;
 static lv_timer_t* game_timer = NULL;
 static lv_timer_t* mole_timer = NULL;
 
-static volatile int play_sound_request = 0;
 static volatile int led_flash_request = 0;
 static volatile int start_game_request = 0;
 
-static pthread_t sound_thread;
 static pthread_t led_thread;
-static volatile int remote_start_request = 0;
-static volatile int remote_finish_request = 0;
-static volatile int finish_from_peer = 0;
 
 static void apply_level_config(int level);
 static void check_level_up(void);
@@ -180,7 +170,7 @@ static void update_mode_label(void)
 
     lv_label_set_text_fmt(mode_label,
                           "MODE: %s",
-                          versus_enabled ? "VERSUS" : "SINGLE");
+                          media_wifi_is_versus_enabled() ? "VERSUS" : "SINGLE");
 }
 
 static void mode_btn_event_cb(lv_event_t* e)
@@ -190,13 +180,13 @@ static void mode_btn_event_cb(lv_event_t* e)
         return;
     }
 
-    versus_enabled = !versus_enabled;
+    media_wifi_set_versus_enabled(!media_wifi_is_versus_enabled());
 
     update_mode_label();
     update_level_label();
 
     printf("[MODE] switched to %s\n",
-           versus_enabled ? "VERSUS" : "SINGLE");
+           media_wifi_is_versus_enabled() ? "VERSUS" : "SINGLE");
 }
 
 static void hide_mole_cb(lv_timer_t* timer);
@@ -205,17 +195,18 @@ static void mode_btn_event_cb(lv_event_t* e);
 static volatile int k1_start_request = 0;
 static pthread_t key_thread;
 
-static pthread_t versus_rx_thread;
-static volatile int peer_score_pending = 0;
-static volatile int peer_score_value = 0;
 static void start_game(lv_event_t* e);
 static void mole_click_event(lv_event_t* e);
 static void update_game_timer(lv_timer_t* timer);
 static void pop_random_mole(lv_timer_t* timer);
 static void pointer_event_cb(lv_event_t* e);
 
-static void* versus_rx_task(void* arg);
-static void versus_ui_timer_cb(lv_timer_t* timer);
+static void update_peer_score(int new_score);
+static void wifi_status_cb(const char* status);
+static void media_remote_start_cb(void* user);
+static void media_remote_finish_cb(void* user);
+static void media_peer_score_cb(int score, void* user);
+static void media_wifi_timer_cb(lv_timer_t* timer);
 static void update_level_label(void)
 {
     if (!level_label)
@@ -321,33 +312,45 @@ static void stats_btn_event_cb(lv_event_t* e)
     storage_print_data();
 }
 
-static void* sound_task(void* arg);
-static void update_peer_score(int new_score);
-static uint32_t get_tick_ms(void);
+static void wifi_status_cb(const char* status)
+{
+    if (wifi_status_label == NULL || status == NULL) {
+        return;
+    }
+
+    lv_label_set_text(wifi_status_label, status);
+}
+
+static void media_remote_start_cb(void* user)
+{
+    (void)user;
+    printf("[GAME] remote start accepted\n");
+    start_game(NULL);
+}
+
+static void media_remote_finish_cb(void* user)
+{
+    (void)user;
+    printf("[GAME] remote finish accepted\n");
+    game_time = 1;
+}
+
+static void media_peer_score_cb(int score, void* user)
+{
+    (void)user;
+    update_peer_score(score);
+}
+
+static void media_wifi_timer_cb(lv_timer_t* timer)
+{
+    (void)timer;
+    media_wifi_timer_poll();
+}
+
 static void* led_task(void* arg);
 static void* key_task(void* arg);
 static void start_game_timer_cb(lv_timer_t* timer);
 struct resource_s R;
-
-
-
-static void* sound_task(void* arg)
-{
-    while (1) {
-
-        if (play_sound_request) {
-
-            play_sound_request = 0;
-
-
-            system("aplay -D hw:audiocodec /data/res/hit.wav");
-        }
-
-        usleep(50 * 1000);
-    }
-
-    return NULL;
-}
 
 
 
@@ -545,7 +548,7 @@ void init_whack_a_mole_game(lv_obj_t* parent)
     mode_label = lv_label_create(game_screen);
     lv_label_set_text_fmt(mode_label,
                           "MODE: %s",
-                          versus_enabled ? "VERSUS" : "SINGLE");
+                          media_wifi_is_versus_enabled() ? "VERSUS" : "SINGLE");
     lv_obj_set_style_text_font(mode_label, R.fonts.size_14.normal, 0);
     lv_obj_set_style_text_color(mode_label, lv_color_hex(0xFFFFFF), 0);
     lv_obj_set_align(mode_label, LV_ALIGN_TOP_LEFT);
@@ -660,7 +663,7 @@ void init_whack_a_mole_game(lv_obj_t* parent)
     lv_obj_set_size(wifi_btn, 70, 26);
     lv_obj_set_align(wifi_btn, LV_ALIGN_TOP_LEFT);
     lv_obj_set_pos(wifi_btn, 8, 86);
-    lv_obj_add_event_cb(wifi_btn, wifi_ui_show, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(wifi_btn, media_wifi_ui_show, LV_EVENT_CLICKED, NULL);
     lv_obj_set_style_bg_color(wifi_btn, lv_color_hex(0x0066CC), 0);
 
     lv_obj_t* wifi_btn_label = lv_label_create(wifi_btn);
@@ -668,6 +671,13 @@ void init_whack_a_mole_game(lv_obj_t* parent)
     lv_obj_set_style_text_font(wifi_btn, R.fonts.size_14.normal, 0);
     lv_obj_set_style_text_color(wifi_btn, lv_color_hex(0xFFFFFF), 0);
     lv_obj_center(wifi_btn_label);
+
+    wifi_status_label = lv_label_create(game_screen);
+    lv_label_set_text(wifi_status_label, "WiFi: idle");
+    lv_obj_set_style_text_font(wifi_status_label, R.fonts.size_14.normal, 0);
+    lv_obj_set_style_text_color(wifi_status_label, lv_color_hex(0xCCCCCC), 0);
+    lv_obj_set_align(wifi_status_label, LV_ALIGN_TOP_LEFT);
+    lv_obj_set_pos(wifi_status_label, 8, 116);
 
     lv_obj_move_foreground(hammer_cursor);
     lv_obj_move_foreground(start_btn);
@@ -710,16 +720,15 @@ static void start_game(lv_event_t* e)
     combo_count = 0;
     update_combo_label();
 
-    if (!versus_enabled) {
+    if (!media_wifi_is_versus_enabled()) {
         apply_level_config(current_level);
     } else {
         update_level_label();
         update_mode_label();
     }
 
-    if (versus_enabled && e != NULL) {
-        versus_send_start(&versus, get_tick_ms(), 0, GAME_TIME);
-        printf("[VERSUS TX] START\n");
+    if (media_wifi_is_versus_enabled() && e != NULL) {
+        media_wifi_versus_send_start(media_wifi_get_tick_ms(), GAME_TIME);
     }
 
     lv_label_set_text_fmt(score_a_label, "P1: %d", score_a);
@@ -748,7 +757,7 @@ static void start_game(lv_event_t* e)
         lv_timer_delete(mole_timer);
         mole_timer = NULL;
     }
-    if (versus_enabled) {
+    if (media_wifi_is_versus_enabled()) {
         mole_timer = lv_timer_create(pop_random_mole, 1000, NULL);
     } else {
         mole_timer = lv_timer_create(pop_random_mole,
@@ -763,7 +772,7 @@ static void pop_random_mole(lv_timer_t* timer)
         lv_obj_add_flag(moles[i], LV_OBJ_FLAG_HIDDEN);
     }
 
-    if (versus_enabled) {
+    if (media_wifi_is_versus_enabled()) {
         int show_count = rand() % 2 + 1;
 
         for (int i = 0; i < show_count; i++) {
@@ -820,7 +829,7 @@ static void update_game_timer(lv_timer_t* timer)
     lv_label_set_text_fmt(time_label, "time: %d", game_time);
 
     if (game_time <= 0) {
-        if (versus_enabled && !finish_from_peer) {
+        if (media_wifi_is_versus_enabled() && !media_wifi_versus_finish_from_peer()) {
             uint8_t result = 2;
 
             if (score_a > score_b) {
@@ -829,11 +838,10 @@ static void update_game_timer(lv_timer_t* timer)
                 result = 0;
             }
 
-            versus_send_finish(&versus, get_tick_ms(), result);
-            printf("[VERSUS TX] FINISH result=%d\n", result);
+            media_wifi_versus_send_finish(media_wifi_get_tick_ms(), result);
         }
 
-        finish_from_peer = 0;
+        media_wifi_versus_clear_finish_flag();
 
         lv_timer_delete(game_timer);
         game_timer = NULL;
@@ -847,7 +855,7 @@ static void update_game_timer(lv_timer_t* timer)
             lv_obj_add_flag(moles[i], LV_OBJ_FLAG_HIDDEN);
         }
 
-        storage_update_result(versus_enabled,
+        storage_update_result(media_wifi_is_versus_enabled(),
                               score_a,
                               score_b,
                               current_level,
@@ -896,72 +904,6 @@ static void update_game_timer(lv_timer_t* timer)
 
 
 
-static void* versus_rx_task(void* arg)
-{
-    uint8_t packet[VERSUS_PACKET_SIZE];
-
-    while (1) {
-        if (versus_enabled) {
-            int ret = versus_wifi_poll_packet(&wifi, packet);
-
-            if (ret > 0) {
-                versus_event_t event;
-                versus_status_t status;
-
-                status = versus_receive(&versus,
-                                        packet,
-                                        get_tick_ms(),
-                                        &event);
-
-                if (status == VERSUS_OK ||
-                    status == VERSUS_ERR_DUPLICATE) {
-                    if (event.msg_type == VERSUS_MSG_START) {
-                        remote_start_request = 1;
-                        printf("[VERSUS RX] START received\n");
-                    } else if (event.msg_type == VERSUS_MSG_FINISH) {
-                        finish_from_peer = 1;
-                        remote_finish_request = 1;
-                        printf("[VERSUS RX] FINISH received\n");
-                    } else {
-                        peer_score_value = event.peer_score;
-                        peer_score_pending = 1;
-
-                        printf("[VERSUS RX] msg=%s score=%d\n",
-                               versus_msg_name(event.msg_type),
-                               event.peer_score);
-                    }
-                } else {
-                    printf("[VERSUS RX] invalid status=%d\n", status);
-                }
-            }
-        }
-
-        usleep(10000);
-    }
-
-    return NULL;
-}
-
-static void versus_ui_timer_cb(lv_timer_t* timer)
-{
-    if (peer_score_pending) {
-        peer_score_pending = 0;
-        update_peer_score(peer_score_value);
-    }
-
-    if (remote_start_request) {
-        remote_start_request = 0;
-        printf("[GAME] remote start accepted\n");
-        start_game(NULL);
-    }
-
-    if (remote_finish_request) {
-        remote_finish_request = 0;
-        printf("[GAME] remote finish accepted\n");
-        game_time = 1;
-    }
-}
-
 static void update_peer_score(int new_score)
 {
     score_b = new_score;
@@ -971,17 +913,9 @@ static void update_peer_score(int new_score)
                           score_b);
 }
 
-
 static void notify_local_score_changed(void)
 {
-    if (!versus_enabled) {
-        return;
-    }
-
-    versus_send_score(&versus,
-                      get_tick_ms(),
-                      score_a,
-                      0);
+    media_wifi_versus_send_score(media_wifi_get_tick_ms(), score_a);
 }
 
 
@@ -1002,7 +936,7 @@ static void mole_click_event(lv_event_t* e)
     if (!lv_obj_has_flag(mole, LV_OBJ_FLAG_HIDDEN)) {
         for (int i = 0; i < 9; i++) {
             if (mole == moles[i]) {
-                if (!versus_enabled) {
+                if (!media_wifi_is_versus_enabled()) {
                     if (mole_types[i] == MOLE_GOLD) {
                         int bonus;
 
@@ -1068,7 +1002,7 @@ static void mole_click_event(lv_event_t* e)
                 lv_timer_t* t = lv_timer_create(hide_hitbox_cb, 300, hit_boxes[i]);
                 lv_timer_set_repeat_count(t, 1);
 
-                play_sound_request = 1;
+                media_wifi_sound_play(MEDIA_SOUND_HIT);
                 led_flash_request = 1;
 
                 break;
@@ -1079,51 +1013,16 @@ static void mole_click_event(lv_event_t* e)
 
 
 
-static uint32_t get_tick_ms(void)
-{
-    struct timespec ts;
-
-    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
-        return 0;
-    }
-
-    return (uint32_t)(ts.tv_sec * 1000u + ts.tv_nsec / 1000000u);
-}
-
-static void versus_init_if_enabled(void)
-{
-    versus_wifi_config_t config;
-    printf("===== VERSUS ENTER =====\n");
-
-    if (!versus_enabled) {
-        return;
-    }
-
-    memset(&config, 0, sizeof(config));
-    config.peer_ip = "192.168.137.91";
-    config.local_port = 43046;
-    config.peer_port = 43045;
-    config.nonblocking = 1;
-
-    if (versus_wifi_open(&wifi, &config) != 0) {
-        printf("versus wifi open failed\\n");
-        versus_enabled = 0;
-        return;
-    }
-
-    versus_init(&versus,
-                VERSUS_DEVICE_B,
-                VERSUS_DEVICE_A,
-                versus_wifi_send_callback,
-                &wifi);
-
-    printf("versus mode enabled: B -> 192.168.137.91\\n");
-}
-
 void app_create(void)
 {
 
     lv_obj_t* scr = lv_screen_active();
+    media_wifi_game_cb_t media_cb = {
+        .on_remote_start = media_remote_start_cb,
+        .on_remote_finish = media_remote_finish_cb,
+        .on_peer_score = media_peer_score_cb,
+        .user = NULL,
+    };
 
     if (!init_resource()) {
         return;
@@ -1131,14 +1030,9 @@ void app_create(void)
 
     storage_init();
 
-
-    versus_init_if_enabled();
+    media_wifi_set_status_callback(wifi_status_cb);
+    media_wifi_init(&media_cb);
     init_whack_a_mole_game(scr);
-
-    pthread_create(&sound_thread,
-                   NULL,
-                   sound_task,
-                   NULL);
 
     pthread_create(&led_thread,
                    NULL,
@@ -1151,12 +1045,7 @@ void app_create(void)
                    key_task,
                    NULL);
 
-    pthread_create(&versus_rx_thread,
-                   NULL,
-                   versus_rx_task,
-                   NULL);
-
-    lv_timer_create(versus_ui_timer_cb,
+    lv_timer_create(media_wifi_timer_cb,
                     50,
                     NULL);
 

@@ -15,6 +15,8 @@ if(CONFIG_EXAMPLES_MYWHACKMOLE)
     MyWhackMole_main.c
     lv_100ask_xz_ai_main.c
     storage.c
-    wifi_ui.c
+    media_wifi/media_wifi.c
+    media_wifi/media_wifi_ui.c
+    versus/versus_protocol.c
   )
 endif()
