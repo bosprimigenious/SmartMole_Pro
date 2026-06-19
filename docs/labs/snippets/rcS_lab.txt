@@ -1,0 +1,10 @@
+# 板级 init.d/rcS 与本实验相关的两行（路径以 SDK 为准）
+
+# 实验一：若串口被综合实验 xiaozhi 刷屏，注释掉：
+/* sh /data/xiaozhi.sh & */
+
+# 实验一可选：开机自启动 hello（须重新 m && pack）：
+hello &
+
+# 实验三：恢复小智自启动（切换 defconfig 后取消注释）：
+sh /data/xiaozhi.sh &

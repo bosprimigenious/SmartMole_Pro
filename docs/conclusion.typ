@@ -72,9 +72,13 @@ SmartMole Pro 在 OpenVela/NuttX 平台上将基础 WhackMole 实验扩展为具
 
 == 3.3 Wi-Fi 双板联机
 
-*协议：* UDP + 自定义 versus 报文（`versus_protocol.c`，24 字节包，CRC 校验，序列号去重）。
+*协议：* UDP + 自定义 versus 报文（`versus_protocol.c`，24 字节包，CRC 校验，序列号去重）。张耀辉在 R528 开发板上完成传输层与应用层框架搭建。
 
 *线程：* `versus_rx_task`（L899–943）非阻塞收包；`versus_ui_timer_cb`（L945–963）50ms 刷新 UI。
+
+*分数同步：* `VERSUS_MSG_SCORE` 经 `update_peer_score` 更新对手分数，双端数据一致刷新。
+
+*状态收敛：* `finish_from_peer` 标志位防止 FINISH 报文循环触发，对局结束状态可靠收敛（张耀辉）。
 
 *IP 锁定：*
 #code-block[
@@ -87,7 +91,7 @@ SmartMole Pro 在 OpenVela/NuttX 平台上将基础 WhackMole 实验扩展为具
 
 == 3.4 WiFi 图形连接
 
-`wifi_ui.c` 提供 LVGL 弹窗：SSID/密码输入、SCAN（结果存 `/data/wifi_scan.txt`）、CONNECT（`wapi` + `ifup wlan0`）。游戏界面 WIFI 按钮（L663）一键打开。
+由朱辰骏负责的 WiFi 连接可视化模块：`wifi_ui.c` 提供 LVGL 弹窗：SSID/密码输入、SCAN（结果存 `/data/wifi_scan.txt`）、CONNECT（`wapi` + `ifup wlan0`）。游戏界面 WIFI 按钮（L663）一键打开。
 
 == 3.5 闯关与特殊地鼠
 
@@ -140,7 +144,7 @@ SmartMole Pro 在 OpenVela/NuttX 平台上将基础 WhackMole 实验扩展为具
 
 == 6.2 团队协作反思
 
-versus 模块由张耀辉与张恒基结对验收后冻结，避免集成冲突；缪钰 UI 与音效框架、朱辰骏 storage 通过明确 API（`storage.h`、`wifi_ui.h`）接入。超声波与 AI 因人力集中于联机演示而延后，符合「核心玩法优先」策略。
+人员分工以《开题报告》§7 为准：张恒基负责系统总架构与全局集成；张耀辉负责 versus 联机并已验收冻结；缪钰负责声光与 GUI；郭志罡负责关卡体系与特殊地鼠；朱辰骏负责存储、WiFi 连接可视化与联机联调；曹佳轩负责多模态输入。各模块通过 `storage.h`、`wifi_ui.h` 等 API 接入。超声波与 AI 因人力集中于联机演示而延后，符合「核心玩法优先」策略。
 
 == 6.3 后续改进方向
 

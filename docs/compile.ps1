@@ -1,6 +1,9 @@
 # SmartMole Pro 项目报告编译
-# 用法: cd docs && .\compile.ps1
+# 用法: cd docs && python compile_all.py
+#       或: cd docs && .\compile-all.ps1
 # 输出: SmartMolePro_*.pdf（中文文件名，便于识别）
+# 答辩 PPT (Slidev 推荐): cd ppt-projects/smartmole-defense/slidev; npm i; npm run setup; npm run dev
+# 答辩 PPT (SVG/PPTX): python scripts/build_svg_all.py
 
 $docs = @(
   @("report.typ",     "SmartMolePro_开题报告.pdf",     "开题报告"),
@@ -31,4 +34,4 @@ Write-Host ""
 Write-Host "完成，输出文件："
 Get-ChildItem "SmartMolePro_*.pdf" | ForEach-Object { "  $($_.Name)" }
 Write-Host ""
-Write-Host "实验报告: cd labs; .\compile.ps1"
+Write-Host "实验报告: cd docs && python compile_all.py"

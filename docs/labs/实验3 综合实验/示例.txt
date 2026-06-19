@@ -1,0 +1,84 @@
+综合实验：AI语音助手实验报告
+
+一、实验目的
+本次综合实验围绕openvela平台上的小智AI语音助手展开，目标是让开发板能够通过Wi-Fi连接小智服务器，完成语音上传、服务器识别和语音回复播放。通过本次实验，我主要熟悉了语音助手在开发板端的程序结构、网络连接、音频采集播放、WebSocket通信和界面显示流程
+在进阶部分，我在原有语音助手程序基础上增加了语音控制LED的功能。用户在正常对话中说出“开灯”或“关灯”时，程序能够根据服务器返回的语音识别文本直接控制开发板LED1亮灭，从而把语音交互和GPIO外设控制结合起来
+
+二、实验环境
+1.实验平台：DshanPI openvela Devkit（T113S3）开发板
+2.主机系统：Windows11
+3.虚拟机环境：VMware+Ubuntu22.04
+4.源码目录：~/vela-opensource/
+5.开发工具：VSCode远程连接Ubuntu，用于查看和修改openvela源码
+6.编译环境：openvela交叉编译环境，在~/vela-opensource/vendor/allwinnertech/lichee/目录下完成编译和打包
+7.串口工具：MobaXterm，Serial模式，Speed设置为1500000，FlowControl设为none
+8.主要程序：
+control_center负责连接小智服务器并处理语音、状态和IoT消息；arecord负责录音并上传音频；aplay负责接收并播放服务器返回的音频；lvgldemo负责显示语音助手界面；wifi_manager负责Wi-Fi配置
+
+三、实验原理
+(1) 小智AI语音助手的设备端由多个程序协同完成。系统启动后，rcS脚本运行/data/xiaozhi.sh，依次启动wifi_manager、arecord、aplay、control_center和lvgldemo。这样开发板启动后可以自动进入语音助手运行环境，不需要每次手动逐个运行程序
+(2) 用户对开发板讲话后，arecord从麦克风采集PCM音频，并经过Opus编码后把音频数据交给control_center。control_center通过WebSocket把音频上传到小智服务器，同时接收服务器返回的控制消息、识别文本和语音数据
+(3) 小智服务器收到音频后，会调用ASR模块把语音转换成文本，再把文本交给LLM生成回复。回复文本经过TTS模块合成为语音后，由服务器通过连接返回给开发板。开发板端aplay接收到音频数据后通过声卡播放出来，用户就能听到大模型的语音回答
+(4) 小智服务器项目支持WebSocket、MQTT+UDP、流式ASR、流式TTS、LLM、Intent和客户端IoT协议。本实验开发板端主要使用WebSocket和Opus音频流完成语音通信，同时利用IoT协议和本地STT文本判断完成LED控制
+
+四、实验内容和操作步骤
+(一) 基础程序检查与配置确认
+1. 我先查看综合实验资料包中的9-5_系统集成目录，里面已经包含control_center、wifi_manager、lvgldemo、sound、UDISK、init.d和defconfig等内容，说明课程资料包已经给出了完整的基础实验程序框架
+2. 随后检查远端SDK中的apps/examples/control_center、apps/examples/lvgldemo和apps/examples/wifi_manager目录，发现相关源码已经存在，其中control_center.c已经包含连接服务器、发送设备状态、处理语音消息和处理IoT消息等主要逻辑，leds.c中也已经封装了LED1和LED2的GPIO控制函数
+3. 但是远端工程之前还停留在实验二配置，defconfig中仍然启用了CONFIG_EXAMPLES_MYWHACKMOLE，CONTROL_CENTER和LVGLDEMO没有启用，rcS脚本中的sh /data/xiaozhi.sh &也被注释。因此不能直接认为基础任务已经完全配置好，还需要把工程切回实验三配置
+4. 我将综合实验包9-5_系统集成中的defconfig替换到开发板nsh配置目录，并恢复rcS末尾的启动命令，使系统启动后可以自动运行/data/xiaozhi.sh。配置切换后，CONTROL_CENTER、LVGLDEMO、WIFI_MANAGER、Wi-Fi、Opus、WebSocket、GPIO和Audio均已启用，MYWHACKMOLE被关闭
+(二) 小智语音助手基础流程实现
+1. 系统启动后，rcS脚本执行/data/xiaozhi.sh，该脚本会启动wifi_manager并设置音频音量，然后启动arecord、aplay、control_center和lvgldemo。这样开发板端的网络、音频、服务器通信和界面显示可以同时工作
+2. control_center启动后会通过WebSocket连接小智服务器，连接成功后发送hello消息，并上报LED1、LED2等IoT设备描述信息。服务器收到后，就知道开发板端有哪些可控制设备以及它们支持的SetStatus方法
+3. 用户讲话时，arecord负责采集并编码音频，control_center负责上传音频数据；服务器完成ASR、LLM、TTS处理后，再把回复音频和文字状态返回给开发板。aplay播放音频，lvgldemo显示对话状态，形成完整的语音助手交互流程
+(三) 进阶功能：语音控制LED
+1. LED底层控制已经在leds.c中实现。leds_init会打开/dev/gpio0和/dev/gpio2，并将它们设置为输出GPIO；leds_ctl根据参数控制对应LED亮灭。其中LED1对应/dev/gpio0，写0为点亮，写1为熄灭
+2. 原程序已经能够处理服务器返回的type为iot的控制命令。如果服务器返回LED1的SetStatus命令，control_center会解析commands数组，取出status参数，然后调用leds_ctl控制LED
+3. 为了更直接地满足题目要求，我在control_center.c中增加了对STT识别文本的本地判断。当服务器返回type为stt的识别结果时，程序会检查文本中是否包含“开灯”“打开灯”“打开LED”“打开LED1”“关灯”“关闭灯”“关闭LED”“关闭LED1”等关键词。如果命中开灯命令，就调用leds_ctl(0,true)点亮LED1；如果命中关灯命令，就调用leds_ctl(0,false)熄灭LED1：
+    static void process_voice_led_command(const char *text)
+    {
+        if (text == NULL) {
+            return;
+        }
+        if (strstr(text, "开灯") || strstr(text, "打开灯") ||
+            strstr(text, "打开LED") || strstr(text, "打开LED1")) {
+            printf("voice command: turn on LED1\n");
+            leds_ctl(0, true);
+        } else if (strstr(text, "关灯") || strstr(text, "关闭灯") ||
+                   strstr(text, "关闭LED") || strstr(text, "关闭LED1")) {
+            printf("voice command: turn off LED1\n");
+            leds_ctl(0, false);
+        }
+    }
+4. 在process_other_json的stt分支中，程序原本只把识别文本发送给界面显示。我在send_stt(text->valuestring)之后调用process_voice_led_command(text->valuestring)，这样语音识别结果一回来就可以触发LED控制，不需要额外唤醒词，也不影响原本的对话流程
+(四) 编译、打包和结果确认
+1. 修改完成后，在~/vela-opensource/vendor/allwinnertech/lichee/目录下重新执行编译。编译日志中可以看到control_center、lvgldemo和wifi_manager都被注册进系统，说明实验三应用已经进入镜像
+2. 编译完成后，将nuttx转换为nuttx.bin，并复制到board/r528s3/velaevb1_nand/configs/nsh.fex中，然后执行pack生成最终镜像。pack过程中可以看到usrdata.fex中已经包含xiaozhi.sh和相关资源文件，最后生成rtos_nuttx_r528s3-velaevb1_uart0_256Mnand.img镜像
+3. 打包脚本末尾出现ap.fex不存在的提示，但前面已经显示Dragon execute image.cfg SUCCESS和pack finish，并且out/r528s3/velaevb1_nand目录下生成了约39M的img文件，所以本次镜像生成有效
+
+五、端到端流程图说明
+本次实验另生成“小智语音通信端到端流程图”，流程图展示了从用户讲话开始，到开发板采集音频、通过WebSocket上传小智服务器、服务器调用ASR、LLM、TTS生成回复，再到开发板播放语音回复的完整链路。同时图中也标出了进阶任务的LED控制支路，即服务器返回STT文本或IoT命令后，control_center解析“开灯/关灯”并通过GPIO控制LED1亮灭
+
+ 
+小智语音通信端到端执行流程图
+
+
+  
+六、相关实验截图
+烧录成功后我先在串口这配置wifi（连的我自己的热点）
+ 
+板子成功连接上我的热点后，屏幕显示了激活码
+ 
+接着我在手机上登陆网址“https://xiaozhi.me”，准备激活小智：
+    
+如下图所示，小智激活成功！！！
+ 
+然后就可以用板子和小智对话啦：
+ 
+注意：开灯、关灯的演示见视频附件！！！
+
+七、实验总结
+通过本次综合实验，我对小智AI语音助手在开发板上的整体运行方式有了更清楚的理解。它不是单独一个程序完成所有事情，而是由Wi-Fi管理、录音、播放、服务器通信和LVGL界面多个部分配合完成
+基础任务部分主要是确认课程资料包中的综合程序能不能正确进入当前SDK和镜像。检查后发现源码和资源基本已经有了，但当前配置曾经停在实验二，所以我重新切换defconfig、恢复rcS自启动，并完成编译打包，使control_center、lvgldemo和wifi_manager真正被编进系统
+进阶任务部分，我在原有IoT命令处理基础上增加了STT文本本地判断。这样用户直接说“开灯”或“关灯”时，开发板可以根据服务器返回的识别结果控制LED1亮灭。这个功能比较小，但能把语音识别结果、服务器通信和GPIO控制串起来，算是一个比较完整的语音控制外设例子
+这次实验让我感觉综合项目最容易出问题的地方不一定是某一行代码，而是配置、启动脚本、资源路径和多个任务之间有没有真正接起来。后面如果继续完善，可以把更多设备加入IoT描述，也可以把语音指令写得更灵活，比如支持“把灯打开”“灯关一下”等更自然的说法！

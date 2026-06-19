@@ -233,7 +233,7 @@
 }
 
 // ── 封面（INTERFACE 风格）──
-#let cover-page(doc-type) = {
+#let cover-page(doc-type, submit-date: datetime.today()) = {
   page(
     margin: (top: 2.2cm, bottom: 2.2cm, x: 2.8cm),
     numbering: none, header: none, footer: none,
@@ -267,7 +267,7 @@
         #set text(size: 11pt, fill: muted)
         开发平台　DshanPI openvela Devkit · T113S3 \
         指导教师　修佳鹏 \
-        提交日期　#datetime.today().display("[year] 年 [month] 月 [day] 日")
+        提交日期　#submit-date.display("[year] 年 [month] 月 [day] 日")
       ]
 
       #v(1.0cm)

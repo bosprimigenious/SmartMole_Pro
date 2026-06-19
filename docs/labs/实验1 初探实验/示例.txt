@@ -1,0 +1,217 @@
+3.2任务与线程上机实验报告
+一、实验目的
+初探实验要求完成学习手册中第3.2节“任务与线程上机实验”的内容，围绕Hello示例程序、线程创建、FIFO调度机制和RR调度机制展开操作与验证
+通过本次实验，掌握openvela应用程序的配置、修改、编译、打包、烧录和串口运行流程；理解pthread_create创建用户线程的基本方法；观察FIFO与RR两种同优先级线程调度机制下的运行现象
+二、实验环境
+实验平台
+DshanPI openvela Devkit（T113S3）开发板
+主机系统
+Windows 11
+虚拟机环境
+VMware + Ubuntu 22.04
+源码目录
+~/vela-opensource/
+开发与编译工具
+VS Code远程连接Ubuntu，openvela交叉编译环境
+烧录与串口工具
+PhoenixSuit；MobaXterm（Serial，Speed 1500000，
+Flow Control: none）
+实验中使用两根USB线连接开发板与电脑，其中一根用于烧录/调试，另一根用于串口输入输出。Ubuntu虚拟机中openvela源码位于~/vela-opensource/目录
+三、实验原理
+openvela基于NuttX实时操作系统，适用于AIoT嵌入式场景。与普通PC程序不同，本实验需要在Ubuntu中完成面向开发板ARM平台的交叉编译，并将编译打包得到的镜像烧录到开发板后运行
+在openvela中，任务可以理解为资源的管理者，线程是系统调度的基本单位。同一任务中的多个线程可以共享全局变量等资源。本实验通过全局变量g_a观察多个线程之间的数据共享和运行先后关系
+用户线程通过POSIX线程接口pthread_create创建，其主要参数包括保存线程ID的thread、线程属性attr、线程入口函数startroutine以及传递给线程函数的参数arg。本次实验在hello_main.c中创建add_thread和print_thread两个线程，并结合主线程输出观察线程调度效果
+openvela对不同优先级线程采用优先级调度；对相同优先级线程支持FIFO和Round Robin两种调度方式。FIFO为系统默认方式，同优先级线程按创建顺序执行，当前线程需要主动阻塞或让出CPU后才会切换；RR通过CONFIG_RR_INTERVAL配置时间片，当该值大于0时，同优先级线程按时间片轮转运行
+四、实验内容和操作步骤（包含截图）
+(一) 实验准备与Hello示例配置
+1. 在Windows主机用VS Code远程连接Ubuntu虚拟机，打开openvela源码目录~/vela-opensource/，确认可以看到apps、nuttx、vendor等目录：
+2. 在VS Code远程终端中进入lichee目录，加载编译环境并选择工程。命令如下：
+ROOT_PATH=/home/ubuntu/vela-opensource
+aw_path=/home/ubuntu/vela-opensource/vendor/allwinnertech/lichee
+cd ~/vela-opensource/vendor/allwinnertech/lichee/
+source vela_env.sh
+source envsetup.sh
+lunch_nuttx
+执行lunch_nuttx后按手册要求选择2，完成当前开发板工程的选择。若没有执行source和lunch_nuttx，直接运行m会出现“m: command not found”或找不到defconfig的问题！
+3. 进入menuconfig配置界面，启用普通Hello示例程序。命令如下：
+cd ~/vela-opensource
+./build.sh vendor/allwinnertech/boards/r528/r528s3-velaevb1/configs/nsh/ menuconfig
+在配置界面中输入“/HELLO”搜索，进入Application Configuration -> Examples，确认启用的是普通“Hello, World!” example，对应源码为apps/examples/hello/hello_main.c
+注意：不能误选Frameworks -> Security或External -> Android中的其他Hello示例！配置完成后按Q退出，并输入Y保存修改
+4. 我第一次烧入与连接时，MobaXterm串口持续输出与xiaozhi、WiFi、opus或control_center相关的后台日志。询问老师后，才清楚需要检查板级启动脚本rcS，将启动/data/xiaozhi.sh的语句注释掉，避免后台任务影响本实验串口观察：
+/* sh /data/xiaozhi.sh & */
+(二) 编译、打包、烧录与串口连接
+1. 完成配置后回到lichee目录进行重新编译和打包。每次修改hello_main.c或系统配置后，都需要重新执行m和pack，因为开发板最终运行的是打包后的.img镜像，而不是直接运行.c源文件！命令如下：
+cd ~/vela-opensource/vendor/allwinnertech/lichee/
+m
+pack
+  
+2. 打包成功后，使用find命令确认目标镜像路径。命令如下：
+find /home/ubuntu/vela-opensource/vendor/allwinnertech/lichee/out -name "rtos_nuttx_r528s3-velaevb1_uart0_256Mnand.img"
+不出意外的话，目标镜像路径为：
+/home/ubuntu/vela-opensource/vendor/allwinnertech/lichee/out/r528s3/velaevb1_nand/rtos_nuttx_r528s3-velaevb1_uart0_256Mnand.img
+3. 将该.img文件下载到本地，打开PhoenixSuit，切换到“一键刷机”界面，选择该镜像文件，点击“全盘擦除升级”。随后按住开发板FEL按键，再短按RST按键，使开发板进入烧录模式并开始烧录：
+4. 烧录完成后，使用MobaXterm连接开发板串口。选择Session -> Serial，端口选择开发板对应COM口，Speed设置为1500000，Flow Control设置为none：
+5. 连接成功后，等待系统启动进入NuttShell，出现nsh>提示符后，即可输入命令
+(三) 第1个程序：Hello验证
+1. 在串口nsh>命令行中输入hello，验证普通Hello示例程序能够正常运行。命令如下：
+hello
+配置和烧录正确，串口将输出Hello相关信息，说明apps/examples/hello/hello_main.c对应的应用已经被正确编译进镜像并能在开发板上执行：
+2. 为了使 Hello 示例程序在系统启动后能够自动运行，还需要修改开发板启动脚本。在 VS Code 中打开启动脚本 rcS 文件，路径如下：
+/home/ubuntu/vela-opensource/vendor/allwinnertech/boards/r528/r528s3-velaevb1/src/etc/init.d/rcS
+在文件末尾或合适位置添加如下命令：
+hello &
+其中，“&”表示将 hello 程序放到后台运行，避免阻塞后续启动流程。保存 rcS 文件后，需要重新执行 m 和 pack 命令生成新的系统镜像，并重新烧录到开发板中。这样开发板启动后会自动执行 Hello 示例程序，串口中也可以观察到对应的 Hello 输出信息：
+小插曲：由于百度网盘上下载的是课程结束版的虚拟机，该系统中的程序是已经随教程修改好了的，导致hello命令对应的hello_example.c会在串口连接的时候执行并打印类似如下指令：
+当把hello_example.c中的相关代码注释后，这些打印自然就没了：
+(四) 编写第1个线程
+1. 根据学习手册3.2.2的相关内容和配套资源，找到“source/3-2-2_编写第1个线程”中的代码。该版本代码使用pthread_create创建add_thread和print_thread两个线程，并通过全局变量g_a观察线程运行情况：
+2. 实验要求将该代码替换到apps/examples/hello/hello_main.c中，替换代码前我备份了原文件，便于后续恢复。相关命令如下：
+mkdir -p ~/experiment_backup
+cp /home/ubuntu/vela-opensource/apps/examples/hello/hello_main.c ~/experiment_backup/hello_main_before_3_2_2.c
+3. 替换后的hello_main.c中能看到pthread_create、add_thread、print_thread和g_a等关键内容。主线程持续打印Hello信息，add_thread线程修改g_a，print_thread线程打印变量值：
+4. 保存代码后重新编译、打包、复制镜像并烧录，流程与(二)相同：
+cd ~/vela-opensource/vendor/allwinnertech/lichee/
+m
+pack
+5. 烧录后在MobaXterm串口中执行hello，观察多个线程的输出。根据学习手册示例，预期现象是主线程输出Hello信息，同时print_thread输出val值，g_a的数值会随add_thread运行而变化。如图所示，输出结果与预期一致：
+为进一步确认线程创建情况，我在串口中执行 ps 命令查看当前系统任务和线程状态。从输出结果可以看到，系统中存在 hello 任务，同时还出现了两个 pthread 线程，说明 hello 程序运行后通过 pthread_create 成功创建了 add_thread 和 print_thread 两个线程。与此同时，串口仍在持续输出 val = ...，说明线程正在正常运行并对全局变量 g_a 进行读写和显示：
+(五) FIFO调度机制体验
+1. 根据学习手册3.2.3，找到“source/3-2-3_FIFO调度机制体验”中的源代码：
+3.2.3部分的上机实验用于观察openvela默认FIFO调度机制下，同优先级线程不主动休眠时的运行现象。FIFO版本代码的关键变化是：主线程、add_thread线程和print_thread线程都去掉sleep休眠，改为较长的空循环延时；同时将线程优先级设置为较高值。由于CONFIG_RR_INTERVAL默认为0，同优先级线程默认采用FIFO调度！完整代码如下：
+#include <nuttx/config.h>
+#include <stdio.h>
+#include <pthread.h>
+#include <nuttx/pthread.h>
+ static volatile int g_a;
+ void * add_thread(void *arg)
+ {
+  volatile int *p = (volatile int * )arg;
+  while (1)
+  {
+    (*p)++;
+    //sleep(1);
+    for (volatile int i = 0; i < 100000000; i++);
+  }
+  return NULL;
+ }
+void * print_thread(void *arg)
+ {
+  volatile int *p = (volatile int * )arg;
+  while (1)
+  {
+    printf("val = %d\n", *p);
+    //sleep(1);
+    for (volatile int i = 0; i < 100000000; i++);
+  }
+  return NULL;
+ }
+int main(int argc, FAR char *argv[])
+{
+  struct sched_param param;
+  pthread_t tid1, tid2;
+  pthread_attr_t default_attr = { \
+    225, /* priority */ \
+    PTHREAD_DEFAULT_POLICY,   /* policy */ \
+    PTHREAD_EXPLICIT_SCHED,   /* inheritsched */ \
+    PTHREAD_CREATE_JOINABLE,  /* detachstate */ \
+    0,                        /* affinity */ \
+    NULL,                     /* stackaddr */ \
+    PTHREAD_STACK_DEFAULT,    /* stacksize */ \
+  };
+  /* Set current thread priority to 225 */
+  param.sched_priority = 225;
+  sched_setparam(0, &param);
+  pthread_create(&tid1, &default_attr, add_thread, &g_a);  // 100
+  pthread_create(&tid2, &default_attr, print_thread, &g_a);
+  while (1)
+  {
+    printf("Hello, World!! g_a = %d\n", g_a);
+    //sleep(5);
+    for (volatile int i = 0; i < 100000000; i++);
+  }
+  return 0;
+}
+2. 替换apps/examples/hello/hello_main.c中的原码为上述代码：
+3. 确认RR时间片保持默认为0（即关闭RR时间片），以确保该部分是在FIFO条件下做的，从而体现FIFO调度！相关命令如下：
+grep -i "RR_INTERVAL" /home/ubuntu/vela-opensource/nuttx/.config
+4. 保存FIFO版本代码后，重新执行m和pack，重新烧录生成的镜像：
+cd ~/vela-opensource/vendor/allwinnertech/lichee/
+m
+pack
+5. 成功烧录后执行hello。根据学习手册说明，本程序创建了主线程、add_thread和print_thread三个最高优先级线程，它们都不会主动休眠，而T113S3只有2个CPU核，因此只能有两个线程持续运行，终端交互会变得困难。预期现象为主线程持续打印“Hello, World!! g_a = ？”且g_a数值会一直发生变化，同时print_thread无法输出val。如图所示，输出结果与预期一致：
+由串口输出可见，系统启动后执行 hello &，FIFO 版本 hello 程序开始运行。运行过程中持续输出 Hello, World!! g_a = ...，且 g_a 数值不断递增，说明 add_thread 线程正在持续修改全局变量 g_a，主线程也在持续输出变量值。由于本实验中多个同优先级线程不主动 sleep，在 FIFO 调度机制下部分线程会长期占用 CPU，因此未观察到 val = ... 输出，串口交互也变得不够流畅，符合 FIFO 调度机制体验的预期现象！
+(六) RR调度机制体验
+1. 根据学习手册3.2.4，将“source/3-2-4_RR调度机制体验”中的源代码替换到apps/examples/hello/hello_main.c里头。完整代码如下：
+#include <nuttx/config.h>
+#include <stdio.h>
+#include <pthread.h>
+#include <nuttx/pthread.h>
+#include <sched.h>
+static void *add_thread(void *arg)
+{
+  volatile int *p = (volatile int *)arg;
+  while (1)
+  {
+    (*p)++;
+    for (volatile int i = 0; i < 100000000; i++);
+    sched_yield();
+  }
+  return NULL;
+}
+static void *print_thread(void *arg)
+{
+  volatile int *p = (volatile int *)arg;
+  while (1)
+  {
+    printf("val = %d\n", *p);
+    for (volatile int i = 0; i < 100000000; i++);
+    sched_yield();
+  }
+  return NULL;
+}
+int main(int argc, FAR char *argv[])
+{
+  struct sched_param param;
+  pthread_t tid1;
+  pthread_t tid2;
+  pthread_attr_t default_attr =
+  {
+    225,                      /* priority */
+    SCHED_RR,                 /* policy */
+    PTHREAD_EXPLICIT_SCHED,   /* inheritsched */
+    PTHREAD_CREATE_JOINABLE,  /* detachstate */
+    0,                        /* affinity */
+    NULL,                     /* stackaddr */
+    PTHREAD_STACK_DEFAULT,    /* stacksize */
+  };
+  param.sched_priority = 225;
+  sched_setscheduler(0, SCHED_RR, &param);
+  pthread_create(&tid1, &default_attr, add_thread, (void *)&g_a);
+  pthread_create(&tid2, &default_attr, print_thread, (void *)&g_a);
+  while (1)
+  {
+    printf("Hello, World!! g_a = %d\n", g_a);
+    for (volatile int i = 0; i < 100000000; i++);
+    sched_yield();
+  }
+  return 0;
+}
+配置RR时间片：
+RR调度需要将CONFIG_RR_INTERVAL设置为1。进入menuconfig，搜索RR_INTERVAL，将其设置为1，保存并退出。相关命令如下：
+cd ~/vela-opensource
+./build.sh vendor/allwinnertech/boards/r528/r528s3-velaevb1/configs/nsh/ menuconfig
+再输入以下命令确保设定的值有效且正确：
+grep -i "RR_INTERVAL" /home/ubuntu/vela-opensource/nuttx/.config
+替换RR版本hello_main.c后，确认代码仍包含主线程、add_thread和print_thread，并保持同优先级线程竞争CPU的结构：
+4. 保存配置和代码后重新编译、打包、烧录：
+cd ~/vela-opensource/vendor/allwinnertech/lichee/
+m
+pack
+5. 烧录后在串口中执行hello。RR调度启用后，同优先级线程会按时间片轮转获得CPU，预期能看到Hello, World!! g_a与val = ...交替或较均衡地输出，相比FIFO更能体现线程之间的公平调度。如图所示，串口输出与预期一致：
+烧录 RR 版本镜像后，系统启动脚本执行 hello &，hello 程序开始后台运行。从串口输出可以看到，程序同时输出 Hello, World!! g_a = ... 和 val = ...。其中 Hello, World!! g_a = ... 来自主线程，val = ... 来自 print_thread 线程，且两类输出交替出现，说明主线程、add_thread 线程和 print_thread 线程都获得了运行机会。与 FIFO 实验中主要只观察到 Hello, World!! g_a = ... 输出相比，RR 调度启用后，同优先级线程能够按时间片轮转方式运行，体现了更加公平的调度效果！
+五、实验总结
+初探实验按照学习手册完成了3.2任务与线程上机实验，完整经历了openvela应用程序从配置、修改源码、编译、打包、烧录到串口运行验证的流程。通过Hello示例程序的验证，进一步明确了开发板上运行的是打包后的系统镜像，因此每次修改hello_main.c后都必须重新m、pack并烧录新镜像
+在线程实验中，通过pthread_create创建了多个用户线程，并利用全局变量g_a观察线程之间共享数据和并发运行的现象。3.2.2实验中，主线程、add_thread和print_thread可以共同输出结果，说明线程创建和运行正常
+在FIFO调度实验中，由于CONFIG_RR_INTERVAL默认为0，同优先级线程采用FIFO机制，线程不主动休眠时会长时间占用CPU，导致部分线程难以获得运行机会，串口交互也会受到影响。在RR调度实验中，将CONFIG_RR_INTERVAL设置为大于0后，同优先级线程按照时间片轮转运行，输出结果更加均衡，能够更直观地体现时间片调度的作用
+通过本次实验，我对openvela中任务、线程和调度机制有了更直观的认识，也熟悉了PhoenixSuit烧录、MobaXterm串口调试以及VS Code远程开发的基本流程。实验过程中遇到的环境变量未加载、配置项误选和串口后台日志干扰等问题，也说明嵌入式开发不仅要关注代码本身，还需要注意系统配置、启动脚本和运行环境等等因素！

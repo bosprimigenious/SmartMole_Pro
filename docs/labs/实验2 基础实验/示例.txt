@@ -1,0 +1,685 @@
+基础实验：LVGL程序开发——WhackMole实验报告
+一、实验目的
+基础实验围绕openvela平台下的LVGL图形界面程序开发展开，通过修改LCD、触摸屏驱动并运行MyWhackMole打地鼠游戏，完成基础图形交互功能和进阶外设交互功能。通过本次实验，主要实现以下目的：
+掌握LCD显示驱动的基本修改方法，理解Framebuffer、RGB565像素格式和横屏显示适配对屏幕显示效果的影响，使开发板屏幕能够正常显示LVGL界面和MyWhackMole游戏画面
+掌握触摸屏输入驱动的基本修改方法，理解触摸坐标上报、轮询/中断方式和坐标变换的作用，使触摸位置能够与屏幕显示位置对应，实现正常的人机交互
+掌握openvela中LVGL应用程序的配置、编译、打包、烧录和串口运行流程，能够将MyWhackMole程序正确加入工程并在开发板上运行
+能够使用LVGL图形库API实现WhackMole基础游戏，包括游戏界面、地鼠随机出现与消失、触摸击中判断、分数显示、倒计时显示和游戏结束提示等功能
+通过阅读MyWhackMole程序代码，分析游戏难度与地鼠出现间隔、停留时间、游戏时长、计分规则等因素之间的关系，理解如何通过修改参数或逻辑改变游戏难度
+在基础游戏功能上完成进阶交互功能，包括击中地鼠时显示视觉特效、播放hit.wav音效、控制LED1闪烁，以及按下K1键开始游戏，从而加深对openvela图形界面、声卡、LED、按键和多任务协作开发流程的理解
+
+实验环境
+实验平台
+DshanPI openvela Devkit（T113S3）开发板
+
+主机系统
+Windows 11
+
+虚拟机环境
+VMware + Ubuntu 22.04
+
+源码目录
+~/vela-opensource/
+
+开发工具
+VS Code远程连接Ubuntu，用于查看、修改openvela源码和实验程序
+
+编译环境
+openvela交叉编译环境
+在~/vela-opensource/vendor/allwinnertech/lichee/下执行：
+source vela_env.sh、source envsetup.sh、lunch_nuttx、m、pack
+
+烧录工具
+PhoenixSuit，用于选择并烧录生成的
+rtos_nuttx_r528s3-velaevb1_uart0_256Mnand.img镜像
+
+串口工具
+MobaXterm（Serial 模式，Speed 1500000，Flow Control: none）
+
+主要实验程序
+MyWhackMole：基于LVGL实现游戏界面、地鼠随机出现、触摸击中、计时和计分等功能
+
+驱动修改内容
+修改LCD显示驱动和触摸屏输入驱动，完成RGB565显示适配、横屏显示适配和触摸坐标适配
+
+资源文件
+res文件夹：包含游戏图片、字体和hit.wav音效文件，放置到board/common/data/UDISK/res后随镜像打包到/data/res
+
+外设功能
+LCD屏幕、触摸屏、声卡、LED1、K1按键：用于完成游戏显示、触摸交互、击中音效、LED闪烁和按键开始游戏
+
+连接方式
+两根USB线连接开发板与电脑：一根用于烧录/调试，另一根用于串口输入输出
+
+
+三、实验原理
+基础实验是在openvela平台上基于LVGL实现MyWhackMole打地鼠游戏。实验整体包括LCD显示、触摸输入、游戏逻辑、音效、LED和按键交互等内容
+(1) LVGL是面向嵌入式设备的图形界面库，可以创建按钮、标签、图片、动画等界面对象。本实验使用LVGL创建游戏背景、地鼠洞、地鼠对象、分数标签、倒计时标签和开始按钮，并通过事件回调和定时器实现点击判断、计时计分和地鼠随机出现
+(2) LCD的显示是依赖于Framebuffer的。Framebuffer是保存整帧图像像素数据的内存区域，LVGL将界面内容写入Framebuffer后，由LCD驱动发送到屏幕显示。本次实验LCD原始分辨率为320×480，像素格式为RGB565，每个像素占16 bit。由于SPI发送数据时存在高低字节顺序问题，需要在LCD驱动中交换RGB565数据的高低字节；同时为了横屏显示游戏，还需要修改LCD方向参数和分辨率配置
+(3) 触摸屏驱动负责把用户触摸转换为坐标输入。本实验使用FT5X06触摸屏驱动，并将触摸设备作为LVGL的输入设备使用。为了提高触摸响应效果，需要关闭FT5X06_POLLMOD，并启用LVGL的NuttX触摸屏支持。横屏后还需要进行坐标交换和坐标修正，使触摸位置与屏幕显示位置对应
+(4) MyWhackMole游戏的核心逻辑是：游戏开始后，定时器控制地鼠随机出现和倒计时变化；用户点击屏幕时，事件回调函数判断是否击中地鼠；击中后更新分数并刷新界面。游戏难度可以通过地鼠出现间隔、停留时间、游戏总时长、计分规则等参数进行调整
+(5) 进阶功能主要是在击中地鼠后增加反馈效果。视觉特效通过LVGL创建半透明框或高亮对象实现；音效通过播放res文件夹中的hit.wav实现；LED1闪烁通过控制开发板LED实现；K1开始游戏则通过读取开发板按键输入并触发start_game逻辑实现。为了避免影响界面刷新，音效、LED和按键检测适合使用任务、线程或标志位方式配合主界面运行
+通过本次实验，可以把LCD、触摸屏、LVGL图形界面、声卡、LED、按键和多任务协作结合起来，理解openvela上嵌入式图形交互程序的基本开发流程
+
+四、实验内容和操作步骤（包含截图）
+(一) 实验准备与基础功能确认
+1. 我在Windows主机使用VS Code远程连接Ubuntu虚拟机，打开openvela源码目录~/vela-opensource/，确认可以看到 apps、nuttx、vendor 等目录。同时为了防止改错回不去，我提前备份了相关文件。命令如下：
+mkdir -p ~/experiment_backup/whackmole
+
+cp /home/ubuntu/vela-opensource/nuttx/drivers/video/spi_lcd_fb.c ~/experiment_backup/whackmole/spi_lcd_fb_before.c
+
+cp /home/ubuntu/vela-opensource/nuttx/drivers/input/ft5x06.c ~/experiment_backup/whackmole/ft5x06_before.c
+
+cp /home/ubuntu/vela-opensource/nuttx/drivers/input/Make.defs ~/experiment_backup/whackmole/input_Make_defs_before
+
+2. 在VS Code远程终端中进入lichee目录，加载编译环境并选择开发板工程。命令如下：
+cd ~/vela-opensource/vendor/allwinnertech/lichee/
+source vela_env.sh
+source envsetup.sh
+lunch_nuttx
+执行lunch_nuttx后按学习手册要求选择2，完成当前开发板工程选择。若没有加载环境直接运行m，可能出现“m: command not found”或找不到defconfig的问题！
+
+3. 在修改驱动和移植游戏前，我先确认了开发板LCD、触摸屏、LED、音频等基础外设能够被系统识别。串口连接方式仍使用MobaXterm，Serial端口选择开发板对应COM口，Speed设置为1500000，Flow Control设置为none。相关命令如下：
+nsh> fb
+nsh> ft5x06 /dev/input0
+nsh> led
+nsh> amixer set 6 180
+nsh> amixer set 7 180
+nsh> amixer set 15 7
+nsh> aplay -D hw:audiocodec /data/moon.wav
+其中，fb用于测试LCD显示；ft5x06 /dev/input0用于输出触摸坐标；led用于测试LED1和K1；aplay用于测试音频播放。我执行上述命令是为了确认后续驱动和进阶功能的基础是否正常！
+但是我在MobaXterm里使用help命令发现少了“fb”和“ft5x06”这两个内置程序没有编译进系统：
+
+因此我在终端执行如下命令进入menuconfig启用相关程序：
+cd ~/vela-opensource/vendor/allwinnertech/lichee/
+source vela_env.sh
+source envsetup.sh
+lunch_nuttx
+m menuconfig
+
+      
+开启后这两个内置程序就编译进系统了：
+
+接下来依次检测相关功能是否工作正常：
+fb
+ 
+ft5x06 /dev/input0
+
+led：Led1闪烁3下
+amixer set 6 180
+amixer set 7 180
+amixer set 15 7
+
+aplay -D hw:audiocodec /data/moon.wav
+
+音乐正常播放！
+
+(二) 修改LCD显示驱动
+1. 打开LCD驱动文件spi_lcd_fb.c，文件路径如下：
+/home/ubuntu/vela-opensource/nuttx/drivers/video/spi_lcd_fb.c
+本实验LCD通过SPI接口发送RGB565像素数据。由于发送顺序与Framebuffer中存储的高低字节顺序相反，需要在发送前对每个像素的两个字节进行交换！
+首先在spi_lcd_updatearea函数定义之前添加RGB565字节交换函数sw_rgb565_swap：
+
+static void sw_rgb565_swap(void * buf, uint32_t buf_size_px)
+{
+    uint32_t u32_cnt = buf_size_px / 2;
+    uint16_t * buf16 = buf;
+    uint32_t * buf32 = buf;
+    while(u32_cnt >= 8) {
+        buf32[0] = ((buf32[0] & 0xff00ff00) >> 8) | ((buf32[0] & 0x00ff00ff) << 8);
+        buf32[1] = ((buf32[1] & 0xff00ff00) >> 8) | ((buf32[1] & 0x00ff00ff) << 8);
+        buf32[2] = ((buf32[2] & 0xff00ff00) >> 8) | ((buf32[2] & 0x00ff00ff) << 8);
+        buf32[3] = ((buf32[3] & 0xff00ff00) >> 8) | ((buf32[3] & 0x00ff00ff) << 8);
+        buf32[4] = ((buf32[4] & 0xff00ff00) >> 8) | ((buf32[4] & 0x00ff00ff) << 8);
+        buf32[5] = ((buf32[5] & 0xff00ff00) >> 8) | ((buf32[5] & 0x00ff00ff) << 8);
+        buf32[6] = ((buf32[6] & 0xff00ff00) >> 8) | ((buf32[6] & 0x00ff00ff) << 8);
+        buf32[7] = ((buf32[7] & 0xff00ff00) >> 8) | ((buf32[7] & 0x00ff00ff) << 8);
+        buf32 += 8;
+        u32_cnt -= 8;
+    }
+    while(u32_cnt) {
+        *buf32 = ((*buf32 & 0xff00ff00) >> 8) | ((*buf32 & 0x00ff00ff) << 8);
+        buf32++;
+        u32_cnt--;
+    }
+    if(buf_size_px & 0x1) {
+        uint32_t e = buf_size_px - 1;
+        buf16[e] = ((buf16[e] & 0xff00) >> 8) | ((buf16[e] & 0x00ff) << 8);
+    }
+}
+
+然后修改spi_lcd_updatearea函数的代码，使SPI发送交换顺序的数据。代码如下：
+
+static int spi_lcd_updatearea(struct fb_vtable_s *vtable, FAR const struct fb_area_s *area)
+{
+  struct spi_dev_s *spi = g_spi_lcd_fb->spi;
+  int stride = g_spi_lcd_fb->planeinfo.stride;
+  int width_byte = area->w * (g_spi_lcd_fb->planeinfo.bpp >> 3);
+  unsigned char *fb = g_spi_lcd_fb->planeinfo.fbmem + area->y * stride + area->x * (g_spi_lcd_fb->planeinfo.bpp >> 3);
+  static uint8_t *swapped_datas;
+  if (!swapped_datas)
+  {
+    swapped_datas = malloc(stride);
+  }
+  LCD_SetWindows(area->x, area->y, area->x + area->w - 1, area->y + area->h - 1);
+  lcd_lock();
+  LCD_SetDataLine();
+  SPI_SELECT(spi, 0, true);
+  for (int y = area->y; y < area->y + area->h; y++)
+  {
+    memcpy(swapped_datas, fb, width_byte);
+    sw_rgb565_swap(swapped_datas, area->w);
+    SPI_SNDBLOCK(spi, swapped_datas, width_byte);
+    fb += stride;
+  }
+  SPI_SELECT(spi, 0, false);
+  lcd_unlock();
+  return 0;
+}
+
+
+2. 保存修改后的文件，编译、打包：
+cd ~/vela-opensource/vendor/allwinnertech/lichee/
+source vela_env.sh
+source envsetup.sh
+lunch_nuttx
+m
+pack
+
+3. 烧录成功后在MobaXterm的串口中输入以下命令并观察板子的屏幕：
+nsh> lvgldemo
+
+
+如图所示：屏幕能够显示白底图形界面和文字内容，界面清晰，说明LVGL能够正常使用framebuffer进行显示！
+(三) 修改触摸屏驱动
+1. 触摸屏状态包括按下、滑动和松开。若使用轮询模式，容易错过按下和松开的瞬间，因此本实验需要将触摸屏驱动改为中断方式。根据基础实验文档中的相关说明，需要将source中改进后的ft5x06.c和Make.defs文件复制到以下目录并覆盖原文件：
+/home/ubuntu/vela-opensource/nuttx/drivers/input/
+覆盖前可先备份原文件，便于后续恢复：
+mkdir -p ~/experiment_backup
+
+cp /home/ubuntu/vela-opensource/nuttx/drivers/input/ft5x06.c ~/experiment_backup/ft5x06_before_whackmole.c
+
+cp /home/ubuntu/vela-opensource/nuttx/drivers/input/Make.defs ~/experiment_backup/Make.defs_before_whackmole
+
+
+2. 进入menuconfig配置界面，搜索FT5X06_POLLMOD，取消选中该配置项，使FT5X06触摸屏使用中断方式。相关命令如下：
+cd ~/vela-opensource/vendor/allwinnertech/lichee/
+source vela_env.sh
+source envsetup.sh
+lunch_nuttx
+m menuconfig
+在配置界面按下“/”搜索FT5X06_POLLMOD，找到后取消选中。然后继续搜索LV_USE_NUTTX和LV_USE_NUTTX_TOUCHSCREEN，并选中这两个配置项，使LVGL能够通过NuttX输入设备读取触摸事件（记得按Q、Y保存！！！）：
+
+
+3. 编译、打包且烧录成功后，在MobaXterm的串口中输入以下命令并观察：
+nsh> lvgldemo
+ 
+在MobaXterm的串口中输入lvgldemo后，串口输出显示framebuffer device opened successfully，且touchscreen/dev/input0 open success，说明LVGL能够正常打开framebuffer显示设备和触摸屏输入设备。当我触摸界面上的WIFI标识后，板子的屏幕切换到选择热点的界面，且串口中触发btn_set_wifi_event_cb相关输出，说明触摸事件能够被系统接收并响应，能够正常点击、滑动，修改成功！
+(四) LCD 与触摸屏横屏适配
+完成 LCD 基础显示修复和触摸屏驱动修改后，为了让 MyWhackMole 游戏界面更适合横屏显示，还需要继续对 LCD 显示方向、Framebuffer 分辨率以及触摸屏坐标映射进行适配。该步骤的核心目的是使屏幕显示方向变为 480×320 横屏，并保证触摸位置与界面响应位置一致！
+1. 修改 LCD 横屏显示方向
+打开 LCD 驱动文件 spi_lcd_fb.c，文件路径如下：
+/home/ubuntu/vela-opensource/nuttx/drivers/video/spi_lcd_fb.c
+在文件中搜索 LCD_WritePara(0x48)，该参数用于设置 LCD 的扫描方向。为了将屏幕从竖屏显示调整为横屏显示，需要将实际生效初始化分支中的参数修改为 0xe8
+原代码为：
+LCD_WritePara(0x48)
+修改为：
+LCD_WritePara(0xe8)
+注意：所有的搜索结果都要修改！！！
+
+2. 修改 LCD 显示范围参数
+继续在 spi_lcd_fb.c 中搜索 set_screen_size 附近的代码。原来 LCD 按 320×480 竖屏设置列地址和行地址，其中 0x3f 对应 320 - 1，0xdf 对应 480 - 1。横屏显示时需要将显示范围调整为 480×320，因此需要交换这两个范围参数
+原代码为：
+LCD_WriteCmd(0x2a);
+LCD_WritePara(0x00);
+LCD_WritePara(0x00);
+LCD_WritePara(0x01);
+LCD_WritePara(0x3f);
+LCD_WriteCmd(0x2b);
+LCD_WritePara(0x00);
+LCD_WritePara(0x00);
+LCD_WritePara(0x01);
+LCD_WritePara(0xdf);
+修改为：
+LCD_WriteCmd(0x2a);
+LCD_WritePara(0x00);
+LCD_WritePara(0x00);
+LCD_WritePara(0x01);
+LCD_WritePara(0xdf);
+LCD_WriteCmd(0x2b);
+LCD_WritePara(0x00);
+LCD_WritePara(0x00);
+LCD_WritePara(0x01);
+LCD_WritePara(0x3f);
+这样设置后，LCD 的列方向范围变为 0～479，行方向范围变为 0～319，与横屏下的 480×320 分辨率对应
+
+3. 修改 Framebuffer 分辨率
+在 spi_lcd_fb_register 函数中找到 Framebuffer 分辨率设置代码。原来系统按竖屏方式设置分辨率：
+fb->videoinfo.xres = 320;
+fb->videoinfo.yres = 480;
+为了适配 WhackMole 横屏游戏界面，需要修改为：
+fb->videoinfo.xres = 480;
+fb->videoinfo.yres = 320;
+修改后，Framebuffer 的逻辑分辨率与 LCD 横屏显示方向一致，LVGL 在绘制界面时会按照 480×320 的横屏尺寸进行布局
+
+4. 修改触摸屏横屏坐标映射
+LCD 改为横屏后，触摸屏上报的原始坐标方向可能仍然与竖屏方向对应。如果不进行坐标适配，可能出现手指点击位置和界面响应位置不一致的问题。因此需要继续修改触摸屏驱动 ft5x06.c，使触摸坐标与横屏后的 LCD 显示方向保持一致！
+打开触摸屏驱动文件：
+/home/ubuntu/vela-opensource/nuttx/drivers/input/ft5x06.c
+在文件中搜索 #ifdef CONFIG_FT5X06_SWAPXY 附近的代码，将触摸点的 x 坐标改为由触摸芯片的 Y 坐标转换得到，并根据横屏宽度 480 进行方向修正
+原代码为：
+x = TOUCH_POINT_GET_Y(touch[0]);
+修改为：
+x = 480 - TOUCH_POINT_GET_Y(touch[0]);
+同时，将多点触摸处理中的坐标映射代码：
+point[i].x = TOUCH_POINT_GET_Y(touch[i]);
+修改为：
+point[i].x = 480 - TOUCH_POINT_GET_Y(touch[i]);
+这样处理后，启用 X/Y 坐标交换时，触摸屏上报到 LVGL 的 x 坐标会根据横屏宽度进行反向修正，使横屏显示下的触摸位置更加准确
+  
+5. 启用 FT5X06_SWAPXY 配置项
+完成 ft5x06.c 坐标映射修改后，进入 menuconfig 配置界面，启用 FT5X06_SWAPXY，使触摸屏驱动在横屏模式下交换 X/Y 坐标
+进入配置界面的命令如下：
+cd ~/vela-opensource/vendor/allwinnertech/lichee/
+source vela_env.sh
+source envsetup.sh
+lunch_nuttx
+m menuconfig
+进入 menuconfig 后按下“/”搜索：
+FT5X06_SWAPXY
+找到该配置项后将其选中，使其显示为：
+[*] Swap X/Y
+保存并退出 menuconfig。启用该配置项后，触摸屏坐标会按照横屏适配逻辑进行转换
+
+6. 重新编译、打包、烧录并验证横屏效果
+完成 LCD 横屏参数、Framebuffer 分辨率和触摸屏坐标映射修改后，需要重新编译、打包并烧录新镜像。命令如下：
+cd ~/vela-opensource/vendor/allwinnertech/lichee/
+source vela_env.sh
+source envsetup.sh
+lunch_nuttx
+m
+pack
+打包完成后，将生成的 rtos_nuttx_r528s3-velaevb1_uart0_256Mnand.img 镜像下载到 Windows 本地，并使用 PhoenixSuit 烧录到开发板
+烧录完成后，使用 MobaXterm 打开串口，在 nsh> 命令行中执行：
+lvgldemo
+观察串口输出和开发板屏幕显示效果。若串口中显示 framebuffer 设备打开成功，并且分辨率变为 xres: 480、yres: 320，同时开发板屏幕能够横屏显示 LVGL 界面，触摸点击或滑动时界面响应位置与手指触摸位置一致，则说明 LCD 与触摸屏横屏适配成功。如图所示，串口输出和图片效果与预期一致：
+
+
+
+(五) 创建 MyWhackMole 应用程序
+1. 进入 apps/examples 目录，复制一份 lvgldemo，并将其重命名为 MyWhackMole。这样可以复用 lvgldemo 原有的 LVGL 初始化和应用结构，并在此基础上开发打地鼠游戏
+cd /home/ubuntu/vela-opensource/apps/examples
+cp -r lvgldemo MyWhackMole
+cd MyWhackMole
+
+
+
+2. 修改MyWhackMole目录下的Kconfig文件，将原有的LVGLDEMO相关配置改为 MYWHACKMOLE，并添加程序优先级、栈大小、触摸屏设备路径和资源根目录配置。为了保证程序正常运行，栈大小设置为327680：
+menuconfig EXAMPLES_MYWHACKMOLE
+tristate "WHACKMOLE Demo"
+default n
+depends on GRAPHICS_LVGL
+
+if EXAMPLES_MYWHACKMOLE
+config EXAMPLES_MYWHACKMOLE_PRIORITY
+int "mywhackmole task priority"
+default 100
+
+config EXAMPLES_MYWHACKMOLE_STACKSIZE
+int "mywhackmole stack size"
+default 327680
+
+config EXAMPLES_MYWHACKMOLE_INPUT_DEVPATH
+string "Touchscreen device path"
+default "/dev/input0"
+depends on INPUT_TOUCHSCREEN
+
+config EXAMPLES_MYWHACKMOLE_DATA_ROOT
+string "Resource root path"
+default "/data/res"
+endif
+
+3. 修改apps/examples/Make.defs，将MyWhackMole加入openvela应用编译队列：
+ifneq ($(CONFIG_EXAMPLES_MYWHACKMOLE),)
+CONFIGURED_APPS += $(APPDIR)/examples/MyWhackMole
+endif
+
+4. 修改MyWhackMole目录中的Makefile。PROGNAME定义最终在串口中执行的命令名，MAINSRC指定主函数所在文件，CSRCS指定游戏核心源码文件：
+include $(APPDIR)/Make.defs
+
+PROGNAME = mywhackmole
+PRIORITY = $(CONFIG_EXAMPLES_MYWHACKMOLE_PRIORITY)
+STACKSIZE = $(CONFIG_EXAMPLES_MYWHACKMOLE_STACKSIZE)
+MODULE = $(CONFIG_EXAMPLES_MYWHACKMOLE)
+
+CSRCS = MyWhackMole.c
+MAINSRC = MyWhackMole_main.c
+
+include $(APPDIR)/Application.mk
+
+
+
+
+5. 修改CMakeLists.txt文件，将MyWhackMole_main.c和MyWhackMole.c加入SRCS，使 CMake构建流程也能正确识别本程序源码：
+
+
+6. 将原lvgldemo.c重命名为MyWhackMole_main.c，并在其中包含头文件MyWhackMole.h。随后禁用原 lv_demos_create 函数调用，在原位置调用本实验程序入口 app_create：
+#include "MyWhackMole.h"
+/* 禁用原有 lv_demos_create 相关代码 */
+#if 0
+lv_demos_create();
+#endif
+/* 创建 WhackMole 游戏界面 */
+app_create();
+
+
+
+
+
+
+7. 在MyWhackMole的目录中新建MyWhackMole.h和MyWhackMole.c这两个源文件。新建后，该目录下包含CMakeLists.txt、Kconfig、Make.defs、Makefile、MyWhackMole.c、MyWhackMole.h、MyWhackMole_main.c 这 7 个关键文件：
+
+(六) 编写 MyWhackMole 游戏核心代码
+1. MyWhackMole.h主要用于声明游戏创建函数、初始化函数和资源路径。资源路径用于加载 res 目录中的图片、字体和音效文件：
+#ifndef __APPS_EXAMPLES_MYWHACKMOLE_MYWHACKMOLE_H
+#define __APPS_EXAMPLES_MYWHACKMOLE_MYWHACKMOLE_H
+#include <lvgl/lvgl.h>
+#define RES_ROOT CONFIG_EXAMPLES_MYWHACKMOLE_DATA_ROOT
+#define ICONS_ROOT RES_ROOT "/icons"
+#define FONTS_ROOT RES_ROOT "/fonts"
+#define HIT_WAV RES_ROOT "/hit.wav"
+void init_whack_a_mole_game(void);
+void app_create(void);
+#endif
+2. MyWhackMole.c是程序核心文件，主要定义游戏屏幕对象、地鼠对象、分数标签、时间标签、锤子光标、分数、游戏时间、游戏计时器和地鼠刷新定时器等变量
+在本程序中，地鼠洞和地鼠对象按 3×3 的布局显示。地鼠洞的位置通过坐标数组决定，后续若需要改变地鼠出现位置或命中区域，也可以从该数组和地鼠对象大小入手：
+static lv_obj_t *game_screen;
+static lv_obj_t *moles[9];
+static lv_obj_t *score_label;
+static lv_obj_t *time_label;
+static lv_obj_t *hammer;
+static lv_timer_t *game_timer;
+static lv_timer_t *mole_timer;
+static int score;
+static int game_time;
+3. init_whack_a_mole_game函数用于创建主界面，包括背景、标题、分数、倒计时、9 个地鼠洞、9 个地鼠对象、开始按钮和锤子光标等元素
+4. start_game函数用于开始或重新开始游戏。该函数会清零得分、重置游戏时间、隐藏全部地鼠，并创建游戏计时器和地鼠刷新定时器：
+score = 0;
+game_time = 30;
+lv_label_set_text_fmt(score_label, "score: %d", score);
+lv_label_set_text_fmt(time_label, "time: %d", game_time);
+game_timer = lv_timer_create(update_game_timer, 1000, NULL);
+mole_timer = lv_timer_create(pop_random_mole, 1000, NULL);
+5. update_game_timer函数用于每秒更新倒计时。当game_time减到0时，删除定时器、隐藏全部地鼠，并弹出Game over提示框
+6. pop_random_mole函数用于随机弹出地鼠。每次刷新时先隐藏所有地鼠，再随机显示1个或多个地鼠。该函数是控制游戏难度的重要位置之一，因为地鼠出现速度、出现数量和显示时间都会影响游戏难度
+7. mole_click_event函数用于处理地鼠点击事件。若被点击的地鼠当前没有隐藏，则说明击中地鼠，程序增加分数、隐藏该地鼠，并触发击中特效、音效和LED闪烁等进阶功能
+
+(七) 存放 res 资源并配置 MyWhackMole 编译选项
+1. 将 res.rar 解压，得到 res 文件夹。该文件夹中包含游戏图片、字体和 hit.wav 音效文件。为了让资源被打包进镜像，需要将 res 文件夹放入开发板数据分区对应目录：
+/home/ubuntu/vela-opensource/vendor/allwinnertech/lichee/board/common/data/UDISK
+烧录后，该目录中的文件通常可在开发板运行时通过 /data 路径访问。因此 hit.wav 的运行路径可设置为：
+/data/res/hit.wav
+
+2. 清除旧配置后重新进入menuconfig，搜索MYWHACKMOLE，选中WHACKMOLE Demo，并确认栈大小、触摸屏路径和资源路径配置正确：
+cd ~/vela-opensource
+m
+
+编译成功后，配置MyWhackMole程序：
+cd ~/vela-opensource
+./build.sh vendor/allwinnertech/boards/r528/r528s3-velaevb1/configs/nsh/ distclean
+./build.sh vendor/allwinnertech/boards/r528/r528s3-velaevb1/configs/nsh/ menuconfig
+在menuconfig中按下“/”搜索 MYWHACKMOLE，找到后选中该配置项。我重点确认了：程序已启用、Stack size 为 327680、Touchscreen device path 为 /dev/input0、Resource root path 为 /data/res：
+
+
+(八) 编译、打包、烧录并运行 MyWhackMole 基础游戏
+1. 完成MyWhackMole程序和资源配置后，回到 lichee 目录重新编译、打包：
+cd ~/vela-opensource/vendor/allwinnertech/lichee/
+m
+pack
+3. 烧录完成后，使用MobaXterm连接串口，在nsh>命令行中执行mywhackmole：
+nsh> mywhackmole
+程序正常运行后，LCD 屏幕上显示 WhackMole 游戏界面，包括地鼠洞、地鼠、分数、倒计时和开始按钮。点击开始后，地鼠会随机出现和隐藏；点击可见地鼠后分数增加，地鼠隐藏；倒计时结束后显示游戏结束提示：
+
+
+
+
+(九) 阅读代码并分析游戏难度调整方法
+通过阅读 MyWhackMole.c 文件可以看出，本游戏的难度并不是由单一变量决定的，而是由游戏总时长、地鼠刷新速度、每次出现的地鼠数量、地鼠显示时间、地鼠位置分布、点击区域大小以及计分方式等多个因素共同决定的。通过修改这些参数，可以比较方便地调整游戏的整体难度和节奏！
+1. 修改游戏总时长
+游戏总时间主要由 GAME_TIME 宏定义控制，代码中默认设置为 30 秒：
+#define GAME_TIME 30
+static int game_time = GAME_TIME
+这里的 GAME_TIME 表示一局游戏持续的总时间。如果把 GAME_TIME 改小，例如改成 20，游戏时间会缩短，玩家需要在更短时间内获得分数，游戏节奏会更紧张，难度也会提高。如果把 GAME_TIME 改大，例如改成 60，玩家有更多时间反应和操作，整体难度就会降低
+因此，GAME_TIME 主要影响的是一局游戏的节奏压力。时间越短，玩家越容易紧张；时间越长，玩家操作空间越大
+2. 修改地鼠刷新速度
+地鼠出现的速度主要由 mole_timer 定时器控制。在 start_game() 函数中，程序创建了地鼠刷新定时器：
+mole_timer = lv_timer_create(pop_random_mole, 1000, NULL)
+其中 1000 表示每 1000 ms 调用一次 pop_random_mole() 函数，也就是每隔 1 秒刷新一次地鼠。如果把这个值改成 700，地鼠刷新速度会变快，玩家需要更快观察和点击，难度会提高。如果改成 1500，地鼠停留时间更长，玩家有更多反应时间，难度会降低
+另外，在 pop_random_mole() 函数中，程序还根据剩余时间动态调整刷新周期：
+if (game_time < 40) {
+    lv_timer_set_period(timer, 800);
+}
+if (game_time < 20) {
+    lv_timer_set_period(timer, 600);
+}
+由于本实验中初始游戏时间是 30 秒，所以游戏开始后地鼠刷新周期会变为 800 ms；当剩余时间小于 20 秒时，又会进一步变为 600 ms。这样设计可以让游戏越到后期刷新越快，使玩家在后半段更紧张，也让游戏难度逐渐增加，而不是从头到尾保持同样节奏
+3. 修改地鼠一次出现的数量
+在 pop_random_mole() 函数中，程序会先隐藏所有地鼠，然后随机显示一部分地鼠：
+for (int i = 0; i < 9; i++) {
+    lv_obj_add_flag(moles[i], LV_OBJ_FLAG_HIDDEN);
+}
+int show_count = rand() % 2 + 1
+这里 show_count 的取值范围是 1 到 2，也就是说每次刷新时会随机出现 1 只或 2 只地鼠。如果希望游戏更简单，可以增加每次出现的地鼠数量，例如改成：
+int show_count = rand() % 3 + 1
+这样一次可能出现 1 到 3 只地鼠，玩家更容易点中目标。但如果刷新速度也同时加快，虽然地鼠数量变多，玩家也需要更快判断位置，游戏仍然会有一定挑战性
+如果希望游戏更难，则可以让每次只出现 1 只地鼠，或者降低地鼠出现概率，这样玩家需要更集中注意力，得分也会更困难
+4. 修改地鼠显示持续时间
+地鼠显示持续时间和 mole_timer 的刷新周期有关。因为每次执行 pop_random_mole() 时，程序都会先把所有地鼠隐藏，再随机显示新的地鼠，所以地鼠大约会显示到下一次刷新为止
+也就是说，如果 mole_timer 周期是 1000 ms，地鼠大约显示 1 秒；如果周期改为 600 ms，地鼠显示时间就会明显变短，玩家必须更快点击。这个参数对游戏难度影响很明显，因为玩家的反应时间直接由它决定
+如果想降低难度，可以让地鼠显示时间更长；如果想提高难度，可以缩短显示时间，让地鼠更快消失
+5. 修改地鼠位置分布
+地鼠洞的位置由 hole_positions 数组控制：
+static hole_pos_t hole_positions[9] = {
+    { 92, 82 }, { 225, 82 }, { 363, 82 },
+    { 69, 149 }, { 225, 149 }, { 363, 149 },
+    { 69, 219 }, { 225, 219 }, { 382, 219 }
+}
+这些坐标决定了 9 个地鼠洞在屏幕上的位置。如果地鼠洞之间距离较近，玩家移动手指的距离较短，操作会更轻松；如果地鼠洞分布更分散，玩家需要在屏幕不同区域快速切换，难度会提高
+因此，可以通过调整 hole_positions 中的坐标来改变游戏难度。例如把地鼠洞放得更分散，或者放在更靠近屏幕边缘的位置，都会增加玩家点击的难度
+6. 修改地鼠大小和点击区域
+代码中每个地鼠洞的大小设置如下：
+lv_obj_set_size(hole, 80, 60)
+地鼠图片是创建在 hole 对象中的：
+moles[i] = lv_image_create(hole)
+lv_image_set_src(moles[i], R.images.mole)
+如果把 hole 的大小调大，或者把地鼠图片显示得更大，玩家更容易点中地鼠，游戏难度会降低。如果把地鼠洞或地鼠图片调小，命中区域变小，玩家需要点得更准确，难度就会提高
+另外，代码中还设置了地鼠图片的缩放：
+lv_obj_set_style_transform_scale(moles[i], 200, 0)
+这个值也会影响地鼠显示大小。通过修改地鼠大小和点击区域，可以比较直观地改变游戏操作难度
+7. 修改计分规则
+当前代码中，玩家点击到显示状态的地鼠时，分数加 1：
+if (!lv_obj_has_flag(mole, LV_OBJ_FLAG_HIDDEN)) {
+    score++;
+    lv_label_set_text_fmt(score_label, "score: %d", score);
+    lv_obj_add_flag(mole, LV_OBJ_FLAG_HIDDEN);
+}
+这种计分方式比较简单，每打中一只地鼠加 1 分，适合基础实验。如果想让游戏更有挑战性，可以增加新的计分规则。例如：
+（1）连续命中多次可以额外加分；
+（2）点击空白区域或误点隐藏地鼠时扣分；
+（3）剩余时间越少，击中地鼠获得的分数越高；
+（4）不同地鼠设置不同分值
+这样可以让游戏不只是简单点击，还需要玩家更加准确地判断和操作，游戏策略性也会更强
+8. 修改地鼠出现的随机性
+代码中使用 rand() 随机选择地鼠出现的位置：
+int mole_idx = rand() % 9
+这说明地鼠会在 9 个位置中随机出现。如果想让游戏更难，可以避免地鼠连续出现在相近位置，或者让它更容易出现在玩家不容易点击的位置。如果想让游戏简单一些，可以让地鼠更均匀地出现，避免长时间不出现在某些位置
+随机性的设计会影响玩家的预判。如果地鼠出现太规律，游戏会变简单；如果完全随机且刷新很快，游戏会更紧张
+9. 综合调整方法
+如果想降低游戏难度，可以采用以下方法：
+将 GAME_TIME 调大，例如从 30 改为 60；
+将 mole_timer 周期调大，例如从 1000 ms 改为 1500 ms；
+增加每次出现的地鼠数量；
+增大地鼠或洞口的点击区域；
+取消误触扣分，只保留命中加分
+如果想提高游戏难度，可以采用以下方法：
+将 GAME_TIME 调小，例如从 30 改为 20；
+将 mole_timer 周期调小，例如改为 600 ms；
+减少每次出现的地鼠数量；
+缩小地鼠尺寸或点击范围；
+让地鼠位置更加分散；
+加入误触扣分或连续命中奖励机制
+总体来看，本游戏的难度可以从时间、速度、数量、位置、大小和计分方式等多个方面进行调整。其中最直接的修改方法是调整 GAME_TIME、mole_timer 的周期以及 show_count 的取值范围。这几个参数改动较小，但对游戏节奏影响明显。通过这些设置，可以把游戏调整成简单、普通或困难等不同难度，更适合不同玩家进行体验！
+(十) 进阶功能1：添加击中地鼠时的视觉特效
+为了让击中反馈更加明显，在mole_click_event中判断地鼠可见并加分后，添加一个半透明方框作为击中特效。实现思路是：创建一个临时lv_obj_t方框对象，设置半透明背景、边框和圆角，将其定位到被击中的地鼠附近；随后创建一个短定时器，经过约200ms后删除该对象。这样每次真正击中地鼠时，屏幕上都会出现短暂的命中提示，玩家可以更直观地看到点击反馈。相关代码如下：
+　　static void hit_effect_delete_cb(lv_timer_t *timer)
+　　{
+　　  lv_obj_t *obj = (lv_obj_t *)timer->user_data;
+　　  if (obj != NULL)
+　　  {
+　　    lv_obj_delete(obj);
+　　  }
+　　  lv_timer_delete(timer);
+　　}
+　　static void show_hit_effect(lv_obj_t *mole)
+　　{
+　　  lv_obj_t *box = lv_obj_create(game_screen);
+　　  lv_obj_set_size(box, lv_obj_get_width(mole) + 12, lv_obj_get_height(mole) + 12);
+　　  lv_obj_align_to(box, mole, LV_ALIGN_CENTER, 0, 0);
+　　  lv_obj_set_style_bg_color(box, lv_color_hex(0xFFFFFF), 0);
+　　  lv_obj_set_style_bg_opa(box, LV_OPA_30, 0);
+　　  lv_obj_set_style_border_color(box, lv_color_hex(0xFFFF00), 0);
+　　  lv_obj_set_style_border_width(box, 3, 0);
+　　  lv_obj_set_style_radius(box, 8, 0);
+　　  lv_obj_remove_flag(box, LV_OBJ_FLAG_CLICKABLE);
+　　  lv_obj_move_foreground(box);
+　　  lv_timer_create(hit_effect_delete_cb, 200, box);
+　　}
+　　在mole_click_event中，击中地鼠后调用show_hit_effect(mole)，即可在地鼠位置显示短暂的半透明命中框。该函数应放在确认地鼠可见并加分的位置，保证只有真正击中地鼠时才出现特效：
+　　static void mole_click_event(lv_event_t *e)
+　　{
+　　  lv_obj_t *mole = lv_event_get_target(e);
+　　  LV_LOG_USER("clicked %d", lv_obj_has_flag(mole, LV_OBJ_FLAG_HIDDEN));
+　　  if (!lv_obj_has_flag(mole, LV_OBJ_FLAG_HIDDEN))
+　　  {
+　　    score++;
+　　    lv_label_set_text_fmt(score_label, "score: %d", score);
+　　    show_hit_effect(mole);
+　　    lv_obj_add_flag(mole, LV_OBJ_FLAG_HIDDEN);
+　　  }
+}
+
+
+
+如图所示，红框圈起来的透明方块即为预期生成的打中地鼠特效！
+(十一) 进阶功能2：击中地鼠时播放hit.wav音效
+　　击中音效参考开发板使用手册3.3中的音乐任务实现。手册中的音乐任务通过创建播放任务调用aplay播放音频文件。本实验不需要播放0~9数字音，而是在击中地鼠时播放res文件夹下的hit.wav。前面我已经将res文件夹放入UDISK目录，烧录后hit.wav可以通过/data/res/hit.wav访问
+　　在程序中封装play_hit_sound函数。为了不阻塞LVGL触摸事件回调，我参考了手册中音乐任务的写法，使用task_create创建短任务来调用aplay_main播放音效，而不是在点击回调中长时间等待：
+　　static void play_hit_sound(void)
+　　{
+　　  static char *argv[] = {"aplay", "/data/res/hit.wav", NULL};
+　　  extern int aplay_main(int argc, char *argv[]);
+　　  task_create("hit_sound", 100, 81920, aplay_main, argv);
+　　}
+　　在mole_click_event中，当判断地鼠可见并加分后，调用play_hit_sound()即可在击中地鼠时播放hit.wav。这样实现方式与学习手册中音乐任务的思想一致，都是通过独立任务完成音频播放，避免影响主界面的响应：
+　　static void mole_click_event(lv_event_t *e)
+　　{
+　　  lv_obj_t *mole = lv_event_get_target(e);
+　　  LV_LOG_USER("clicked %d", lv_obj_has_flag(mole, LV_OBJ_FLAG_HIDDEN));
+　　  if (!lv_obj_has_flag(mole, LV_OBJ_FLAG_HIDDEN))
+　　  {
+　　    score++;
+　　    lv_label_set_text_fmt(score_label, "score: %d", score);
+　　    show_hit_effect(mole);
+　　    play_hit_sound();
+　　    lv_obj_add_flag(mole, LV_OBJ_FLAG_HIDDEN);
+　　  }
+
+
+
+如图所示，当击中地鼠时，串口会输出“play hit sound: /data/res/hit.wav”，说明音效驱动响应成功了！并且我也确实听到了相应的音效声音！！！
+
+(十二) 进阶功能3：击中地鼠时LED1闪烁
+　　LED1闪烁我参考了开发板使用手册3.3中的LED任务。GPIO设备通过open打开设备节点，再通过ioctl设置GPIO类型和输出电平。通过在串口中输入ls/dev我注意到了：系统中存在gpio0、gpio1等设备节点。进一步查看SDK中的drv_gpio.c可知，当前GPIO映射已经包含LED1和K1，不需要额外修改GPIO驱动：
+　　static struct sunxi_gpio_map maps[] = {
+　　  {0, GPIOD(21), GPIO_OUTPUT_PIN},         /* LED1 */
+　　  {1, GPIOD(7), GPIO_INPUT_PIN_PULLDOWN},  /* KEY1 */
+　　  {2, GPIOD(22), GPIO_OUTPUT_PIN},         /* LED2 */
+　　  {3, GPIOD(8), GPIO_INPUT_PIN_PULLDOWN},  /* KEY2 */
+　　  {4, GPIOD(9), GPIO_INPUT_PIN_PULLDOWN},  /* KEY3 */
+　　  {5, GPIOG(12), GPIO_OUTPUT_PIN},         /* WL_REG_ON */
+　　};
+　　由映射关系可以确定，/dev/gpio0对应LED1，/dev/gpio1对应KEY1，也就是K1。因此本实验中LED1闪烁应操作/dev/gpio0！
+　　在MyWhackMole程序中，我封装flash_led1函数。击中地鼠后点亮LED1，短暂延时后再熄灭。由于不同开发板可能存在高电平点亮或低电平点亮的差异，实际实验中，我以LED1能观察到闪烁为准。如果发现亮灭逻辑相反，只需要交换GPIOC_WRITE中的0和1：
+　　static void flash_led1(void)
+　　{
+　　  int fd_led = open("/dev/gpio0", O_RDWR);
+　　  if (fd_led < 0)
+　　  {
+　　    return;
+　　  }
+　　  ioctl(fd_led, GPIOC_SETPINTYPE, GPIO_OUTPUT_PIN);
+　　  ioctl(fd_led, GPIOC_WRITE, 0);
+　　  usleep(150 * 1000);
+　　  ioctl(fd_led, GPIOC_WRITE, 1);
+　　  close(fd_led);
+　　}
+　　在mole_click_event中，当判断地鼠可见并加分后调用flash_led1()，即可实现击中地鼠时LED1闪烁：
+　　static void mole_click_event(lv_event_t *e)
+　　{
+　　  lv_obj_t *mole = lv_event_get_target(e);
+　　  LV_LOG_USER("clicked %d", lv_obj_has_flag(mole, LV_OBJ_FLAG_HIDDEN));
+　　  if (!lv_obj_has_flag(mole, LV_OBJ_FLAG_HIDDEN))
+　　  {
+　　    score++;
+　　    lv_label_set_text_fmt(score_label, "score: %d", score);
+　　    show_hit_effect(mole);
+　　    play_hit_sound();
+　　    flash_led1();
+　　    lv_obj_add_flag(mole, LV_OBJ_FLAG_HIDDEN);
+　　  }
+　　}
+
+
+
+如图所示，串口确实打印了“flash LED1: /dev/gpio0”，说明LED1的闪烁驱动响应成功！并且板子上的LED1确实在打中地鼠时会进行闪烁！！！
+
+(十三) 进阶功能4：按下K1键开始游戏
+　　按下K1键开始游戏，我同样参考了LED任务中的按键读取逻辑。根据drv_gpio.c中的映射关系，/dev/gpio1对应KEY1，也就是K1。程序可以打开/dev/gpio1作为K1输入设备，通过GPIOC_READ读取按键电平。当检测到K1被按下时，调用start_game函数开始游戏
+　　由于start_game会修改LVGL界面对象，而K1检测在线程中运行，因此在线程中调用start_game时应加上LVGL锁，避免和界面刷新同时操作LVGL对象：
+　　static void *key_thread(void *arg)
+　　{
+　　  int fd_key = open("/dev/gpio1", O_RDONLY);
+　　  bool key_value;
+　　  if (fd_key < 0)
+　　  {
+　　    return NULL;
+　　  }
+　　  ioctl(fd_key, GPIOC_SETPINTYPE, GPIO_INPUT_PIN_PULLDOWN);
+　　  while (1)
+　　  {
+　　    ioctl(fd_key, GPIOC_READ, (unsigned long)((uintptr_t)&key_value));
+　　    if (key_value == true)
+　　    {
+　　      lvgl_lock();
+　　      start_game(NULL);
+　　      lvgl_unlock();
+　　      usleep(300 * 1000);
+　　    }
+　　    usleep(20 * 1000);
+　　  }
+　　  return NULL;
+　　}
+　　我在app_create或init_whack_a_mole_game完成界面初始化后，创建key_thread线程。这样游戏启动后可以先停留在准备界面，用户按下K1后再开始游戏；屏幕上的START按钮也可以保留，作为触摸方式开始游戏的备用入口：
+　　pthread_t tid_key;
+　　pthread_create(&tid_key, NULL, key_thread, NULL);
+　　实际测试时发现按下K1没有反应，需要根据串口打印或GPIO读取结果确认按键电平。如果按下时读到0，则将判断条件改为key_value==false；如果按下时读到1，则保持key_value==true。本次SDK中KEY1配置为GPIO_INPUT_PIN_PULLDOWN，因此我默认按下时按高电平触发处理！
+
+
+
+如图所示，当我按板子上的K1按钮时，串口如期先输出了“K1 key thread started: /dev/gpio1”，后输出了“K1 pressed, start game”！并且板子上也立刻开启了打地鼠游戏，完全满足要求！！！
+五、实验总结
+本次实验从驱动修改、应用创建、资源打包、编译烧录到开发板运行验证，完整实现了基于LVGL的WhackMole游戏。相比初探实验，本实验不只是验证任务和线程，而是把LCD显示、触摸屏、LVGL界面、音频、GPIO和按键等内容结合在一起，更接近一个完整的嵌入式交互应用
+在基础任务部分，我完成了LCD显示和触摸屏相关配置，使屏幕能够横屏显示，并且触摸坐标能够正常对应游戏界面。随后在示例工程基础上创建MyWhackMole应用，完成Kconfig、Make.defs、Makefile和CMakeLists.txt等文件配置，并编写MyWhackMole_main.c、MyWhackMole.h和MyWhackMole.c，最终成功在开发板上运行打地鼠游戏
+在阅读代码和调试过程中，我理解了游戏难度主要由game_time、mole_timer刷新周期、地鼠一次出现数量、地鼠大小和位置、得分规则等因素决定。通过调整这些参数，可以改变游戏节奏和玩家反应压力，也让我对LVGL定时器和事件回调的使用更加熟悉
+在进阶任务部分，我给击中地鼠添加了半透明方框特效，让命中反馈更加明显；同时参考openvela手册中的音乐任务和LED任务，实现了击中时播放hit.wav音效、LED1闪烁以及按下K1开始游戏。这样游戏不只是在屏幕上显示，还加入了声音、灯光和物理按键反馈，交互效果更加完整
+通过这次实验，我认识到嵌入式图形程序并不是只写界面代码，还要同时考虑驱动配置、资源路径、构建系统、文件系统、设备节点和多任务配合。后续如果继续完善，可以进一步优化音效和LED触发方式，减少阻塞和轮询，也可以加入难度选择、排行榜或更多动画效果!

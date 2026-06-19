@@ -68,29 +68,25 @@
   pagebreak()
 }
 
-// ── 截图占位（将 PNG 放入 labs/images/ 后替换为 #image(...)）──
-#let screenshot(path, caption, width: 100%) = {
+// ── 实验截图（路径相对 docs/ 根目录；默认 78% 宽，上下留白避免「挤在一起」）──
+#let lab-img(path, caption, width: 78%) = {
+  v(0.45em)
   figure(
-    block(
-      width: width,
-      height: 7.5cm,
-      fill: surface,
-      stroke: (paint: border, dash: "dashed"),
-      radius: 4pt,
-      inset: 12pt,
-      breakable: false,
-    )[
-      #align(center + horizon)[
-        #set text(size: hint-size, fill: muted)
-        【请插入截图】\
-        `#path`\
-        #v(0.4em)
-        #caption
-      ]
+    align(center)[
+      #image(path, width: width)
     ],
     caption: caption,
   )
+  v(0.35em)
 }
+
+#let screenshot = lab-img
+
+// 从 snippets/ 读取代码文件嵌入报告（路径相对本 typ 文件）
+#let embed-code(path, lang: "c") = code-block[
+  #set text(font: mono-font, size: code-size)
+  #raw(block: true, lang: lang, read(path))
+]
 
 // ── 时序图（ASCII，对齐 INTERFACE.typ）──
 #let seq-diagram(content, caption, roles: none) = figure(

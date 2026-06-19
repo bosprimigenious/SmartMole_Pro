@@ -1,0 +1,155 @@
+/* 北京邮电大学 · SmartMole Pro 答辩主题 */
+:root {
+  --bupt-blue: #003399;
+  --bupt-blue-light: #1a4db3;
+  --bupt-post-green: #00843d;
+  --bupt-gold: #d4a84b;
+  --bupt-bg: #0a1628;
+  --bupt-bg-card: rgba(255, 255, 255, 0.06);
+  --bupt-text: #e8ecf1;
+  --bupt-muted: #8b9cb3;
+  --bupt-ok: #22c55e;
+  --bupt-warn: #f97316;
+  --bupt-no: #ef4444;
+
+  --slidev-theme-primary: var(--bupt-blue);
+  --slidev-theme-accent: var(--bupt-gold);
+}
+
+.slidev-layout {
+  background: radial-gradient(ellipse 120% 80% at 80% 0%, rgba(0, 51, 153, 0.35) 0%, transparent 55%),
+    radial-gradient(ellipse 80% 60% at 0% 100%, rgba(0, 132, 61, 0.12) 0%, transparent 50%),
+    var(--bupt-bg) !important;
+  color: var(--bupt-text);
+  font-family: "Microsoft YaHei", "PingFang SC", "Helvetica Neue", sans-serif;
+}
+
+h1, h2, h3 {
+  color: var(--bupt-text) !important;
+  font-weight: 700;
+}
+
+h1 {
+  background: linear-gradient(135deg, #fff 0%, var(--bupt-gold) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.slidev-page-number {
+  color: var(--bupt-muted) !important;
+  opacity: 0.8;
+}
+
+.card {
+  background: var(--bupt-bg-card);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  padding: 1rem 1.2rem;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+  transition: transform 0.25s ease, border-color 0.25s;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(212, 168, 75, 0.35);
+}
+
+.card-ok { border-left: 4px solid var(--bupt-ok); }
+.card-warn { border-left: 4px solid var(--bupt-warn); }
+.card-no { border-left: 4px solid var(--bupt-no); }
+.card-primary { border-left: 4px solid var(--bupt-blue-light); }
+
+.badge {
+  display: inline-block;
+  padding: 0.15em 0.55em;
+  border-radius: 6px;
+  font-size: 0.85em;
+  font-weight: 700;
+}
+
+.badge-ok { background: rgba(34, 197, 94, 0.2); color: var(--bupt-ok); }
+.badge-warn { background: rgba(249, 115, 22, 0.2); color: var(--bupt-warn); }
+.badge-no { background: rgba(239, 68, 68, 0.2); color: var(--bupt-no); }
+
+.hero-tag {
+  display: inline-block;
+  background: linear-gradient(90deg, var(--bupt-blue), var(--bupt-blue-light));
+  color: #fff;
+  padding: 0.35em 1em;
+  border-radius: 999px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  border: 1px solid rgba(212, 168, 75, 0.4);
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+}
+
+.img-frame {
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.img-frame img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.cover-bg {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  opacity: 0.22;
+  mix-blend-mode: luminosity;
+  z-index: 0;
+}
+
+.cover-content {
+  position: relative;
+  z-index: 1;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+th {
+  background: linear-gradient(90deg, var(--bupt-blue), var(--bupt-blue-light));
+  color: #fff;
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+
+td {
+  padding: 0.45rem 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+tr:nth-child(even) td {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.mermaid {
+  background: transparent !important;
+}
+
+.slidev-icon-btn {
+  color: var(--bupt-gold) !important;
+}
