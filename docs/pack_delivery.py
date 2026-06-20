@@ -15,7 +15,10 @@ OUT_PATH = ROOT / OUT_NAME
 DOC_FILES = [
     "docs/SmartMolePro_开题报告.pdf",
     "docs/SmartMolePro_结题报告.pdf",
-    "docs/SmartMole Pro 多模态感知智能打地鼠竞技系统结题报告.pdf",
+    "docs/SmartMolePro_分工报告.pdf",
+    "docs/SmartMolePro_任务进度报告.pdf",
+    "docs/SmartMolePro_Final_全集.pdf",
+    "docs/SmartMole Pro 多模态感知智能打地鼠竞技系统结题报告.pptx",
     "docs/第六组-SmartMole Pro：多模态感知智能打地鼠竞技系统.pptx",
 ]
 
@@ -94,7 +97,10 @@ README = """SmartMole Pro · 第六组结题交付包
 文档/
   SmartMolePro_开题报告.pdf
   SmartMolePro_结题报告.pdf
-  SmartMole Pro 多模态感知智能打地鼠竞技系统结题报告.pdf
+  SmartMolePro_分工报告.pdf
+  SmartMolePro_任务进度报告.pdf
+  SmartMolePro_Final_全集.pdf
+  SmartMole Pro 多模态感知智能打地鼠竞技系统结题报告.pptx
   第六组-SmartMole Pro：多模态感知智能打地鼠竞技系统.pptx
 
 源码/
