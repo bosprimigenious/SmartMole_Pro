@@ -28,9 +28,10 @@ CODE_DIRS = [
     "docs/labs/snippets",
 ]
 
-# 可选：报告插图、编译脚本
+# 可选：报告插图、演示视频、编译脚本
 EXTRA_PATHS = [
     "docs/images",
+    "docs/videos",
     "docs/compile_all.py",
     "docs/merge_final.py",
     "docs/compile.ps1",
@@ -108,7 +109,8 @@ README = """SmartMole Pro · 第六组结题交付包
   docs/labs/snippets/       实验/报告用代码片段
 
 其他/
-  docs/images/              演示与采购实物图
+  docs/images/              演示截图与采购实物图
+  docs/videos/              实机演示录像（五级闯关 / 联机 / 打击特效等）
   docs/compile*.py|ps1      文档编译脚本（可选）
 
 说明：本 zip 不含 .typ / .md 源稿；镜像 .img 体积较大未打入包内。

@@ -37,6 +37,11 @@ docs/ppt-projects/
 *.tar.gz
 SmartMolePro_*_交付包*.zip
 _ppt_review.txt
+微信视频*.mp4
+
+# 演示视频（本地保留并打入交付包，不进 git）
+docs/videos/*.mp4
+!docs/videos/README.txt
 
 # Python
 __pycache__/
