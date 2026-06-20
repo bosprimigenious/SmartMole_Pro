@@ -54,7 +54,7 @@ def merge_final() -> dict:
     cover = BUILD / "cover.pdf"
     compile_typ(DOCS / "final_cover.typ", cover)
 
-    # 课程叙事：立项 → 分工 → 实验递进 → 进度 → 结题 → 附录
+    # 课程叙事：立项 → 分工 → 进度 → 结题 → 附录（不含三份上机实验报告）
     sequence: list[tuple[str, Path]] = [
         ("封面", cover),
         ("扉页·总目录说明", divider_pdf("toc", "SmartMole Pro", "课程材料全集", "按课程逻辑编排")),
@@ -70,31 +70,15 @@ def merge_final() -> dict:
             DOCS / "SmartMolePro_分工报告.pdf",
         ),
         (
-            divider_pdf("p3", "第三篇", "实验实践", "初探 → 基础 → 综合"),
-            None,
-        ),
-        (
-            divider_pdf("p3a", "第三篇 · 实验一", "3.2 任务与线程", "初探实验 · NuttX 调度与 pthread"),
-            LABS / "实验1 初探实验" / "实验报告_3.2任务与线程.pdf",
-        ),
-        (
-            divider_pdf("p3b", "第三篇 · 实验二", "MyWhackMole 打地鼠", "基础实验 · LVGL 与驱动"),
-            LABS / "实验2 基础实验" / "实验报告_MyWhackMole打地鼠.pdf",
-        ),
-        (
-            divider_pdf("p3c", "第三篇 · 实验三", "小智 AI 语音助手", "综合实验 · 语音联网与 LED"),
-            LABS / "实验3 综合实验" / "实验报告_小智AI语音助手.pdf",
-        ),
-        (
-            divider_pdf("p4", "第四篇", "任务进度", "里程碑与完成情况"),
+            divider_pdf("p3", "第三篇", "任务进度", "里程碑与完成情况"),
             DOCS / "SmartMolePro_任务进度报告.pdf",
         ),
         (
-            divider_pdf("p5", "第五篇", "项目结题", "成果总结与展望"),
+            divider_pdf("p4", "第四篇", "项目结题", "成果总结与展望"),
             DOCS / "SmartMolePro_结题报告.pdf",
         ),
         (
-            divider_pdf("p6", "附录", "答辩与资料说明", "大纲、素材来源与工程说明"),
+            divider_pdf("p5", "附录", "答辩与资料说明", "大纲、素材来源与工程说明"),
             None,
         ),
         (

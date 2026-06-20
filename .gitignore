@@ -26,6 +26,21 @@ archives/*.zip
 
 # Typst compile scratch
 docs/footer_test*.pdf
+docs/_final_build/
+
+# PPT / 文档构建临时目录
+_pptx_extract/
+docs/_from_md/
+docs/ppt-projects/
+
+# 本地打包与归档（不提交远程）
+*.tar.gz
+SmartMolePro_*_交付包*.zip
+_ppt_review.txt
+
+# Python
+__pycache__/
+*.pyc
 
 # Fonts are tracked separately; ignore accidental downloads
 docs/fonts/*.zip
